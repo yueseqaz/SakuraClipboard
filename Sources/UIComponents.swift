@@ -109,6 +109,20 @@ class HoverPreviewImageView: NSImageView {
         previewPopover.performClose(nil)
     }
 
+    func syncPreviewWithMouseLocation() {
+        guard let window else {
+            previewPopover.performClose(nil)
+            return
+        }
+        let mouseInWindow = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        let mouseInSelf = convert(mouseInWindow, from: nil)
+        if bounds.contains(mouseInSelf), image != nil {
+            showPreview()
+        } else {
+            previewPopover.performClose(nil)
+        }
+    }
+
     private func showPreview() {
         guard let image else { return }
         let imageID = ObjectIdentifier(image)
@@ -360,11 +374,13 @@ class ClipRowView: NSView {
                 isHovering = false
                 applyHoverStyle()
             }
+            imageView?.syncPreviewWithMouseLocation()
             return
         }
         let mouseInWindow = window.convertPoint(fromScreen: NSEvent.mouseLocation)
         let mouseInSelf = convert(mouseInWindow, from: nil)
         let hoveringNow = bounds.contains(mouseInSelf)
+        imageView?.syncPreviewWithMouseLocation()
         guard hoveringNow != isHovering else { return }
         isHovering = hoveringNow
         applyHoverStyle()
