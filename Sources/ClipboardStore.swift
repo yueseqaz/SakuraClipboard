@@ -202,8 +202,9 @@ class ClipboardStore {
     func filteredItems(query: Query) -> [ClipboardItem] {
         dbLock.lock()
         defer { dbLock.unlock() }
+        let selectText = "substr(text, 1, \(Self.textPreviewFetchLimit)) AS text"
         var sql = """
-        SELECT id, type, text, image_data, created_at, is_favorite, length(text)
+        SELECT id, type, \(selectText), NULL AS image_data, created_at, is_favorite, length(text)
         FROM clipboard_items
         WHERE 1 = 1
         """
@@ -230,7 +231,7 @@ class ClipboardStore {
 
         sql += " ORDER BY is_favorite DESC, created_at DESC;"
 
-        return fetch(sql: sql, binders: bindings, includeImageData: false)
+        return fetch(sql: sql, binders: bindings)
     }
 
     private func finalizeChanges() {
@@ -381,34 +382,23 @@ class ClipboardStore {
     }
 
     private func loadAll() {
+        let selectText = "substr(text, 1, \(Self.textPreviewFetchLimit)) AS text"
         items = fetch(
             sql: """
-            SELECT id, type, text, image_data, created_at, is_favorite, length(text)
+            SELECT id, type, \(selectText), NULL AS image_data, created_at, is_favorite, length(text)
             FROM clipboard_items
             ORDER BY is_favorite DESC, created_at DESC;
-            """,
-            includeImageData: false
+            """
         )
     }
 
     private func fetch(
         sql: String,
-        binders: [(OpaquePointer?, Int32) -> Void] = [],
-        truncateText: Bool = true,
-        includeImageData: Bool = true
+        binders: [(OpaquePointer?, Int32) -> Void] = []
     ) -> [ClipboardItem] {
         guard let db else { return [] }
-        var effectiveSQL = sql
-        if truncateText {
-            effectiveSQL = effectiveSQL
-                .replacingOccurrences(of: "SELECT id, type, text, image_data, created_at, is_favorite, length(text)", with: "SELECT id, type, substr(text, 1, \(Self.textPreviewFetchLimit)) AS text, image_data, created_at, is_favorite, length(text)")
-                .replacingOccurrences(of: "SELECT id, type, text, image_data, created_at, is_favorite", with: "SELECT id, type, substr(text, 1, \(Self.textPreviewFetchLimit)) AS text, image_data, created_at, is_favorite")
-        }
-        if !includeImageData {
-            effectiveSQL = effectiveSQL.replacingOccurrences(of: "image_data", with: "NULL AS image_data")
-        }
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, effectiveSQL, -1, &stmt, nil) == SQLITE_OK else {
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
             if let msg = sqlite3_errmsg(db) {
                 print("SQLite query prepare failed: \(String(cString: msg))")
             }
