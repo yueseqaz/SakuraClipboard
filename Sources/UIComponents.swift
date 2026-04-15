@@ -52,6 +52,18 @@ class BadgeView: NSView {
 // MARK: - Hover Preview Image
 class HoverPreviewImageView: NSImageView {
     private let previewPopover = NSPopover()
+    private var previewImageID: ObjectIdentifier?
+
+    override var image: NSImage? {
+        didSet {
+            if image == nil {
+                previewPopover.performClose(nil)
+                previewImageID = nil
+                return
+            }
+            showPreviewIfHovering()
+        }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -68,15 +80,28 @@ class HoverPreviewImageView: NSImageView {
         previewPopover.animates = true
         previewPopover.appearance = NSAppearance(named: .aqua)
 
+        updateTrackingAreas()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for ta in trackingAreas {
+            removeTrackingArea(ta)
+        }
         let ta = NSTrackingArea(
             rect: .zero,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
             owner: self
         )
         addTrackingArea(ta)
+        showPreviewIfHovering()
     }
 
     override func mouseEntered(with event: NSEvent) {
+        showPreview()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
         showPreview()
     }
 
@@ -85,7 +110,15 @@ class HoverPreviewImageView: NSImageView {
     }
 
     private func showPreview() {
-        guard let image, !previewPopover.isShown else { return }
+        guard let image else { return }
+        let imageID = ObjectIdentifier(image)
+        if previewPopover.isShown, previewImageID == imageID {
+            return
+        }
+
+        if previewPopover.isShown {
+            previewPopover.performClose(nil)
+        }
         let vc = NSViewController()
 
         let preview = NSImageView(image: image)
@@ -99,7 +132,16 @@ class HoverPreviewImageView: NSImageView {
         vc.view = preview
         previewPopover.contentViewController = vc
         previewPopover.contentSize = size
+        previewImageID = imageID
         previewPopover.show(relativeTo: bounds, of: self, preferredEdge: .maxX)
+    }
+
+    private func showPreviewIfHovering() {
+        guard let window, image != nil else { return }
+        let mouseInWindow = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        let mouseInSelf = convert(mouseInWindow, from: nil)
+        guard bounds.contains(mouseInSelf) else { return }
+        showPreview()
     }
 
     private func previewSize(for image: NSImage) -> NSSize {
