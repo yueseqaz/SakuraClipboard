@@ -236,10 +236,10 @@ class PopoverController: NSViewController {
         maxItemsValueLabel.font = DS.fontSmall
         maxItemsValueLabel.textColor = DS.textPrimary
         maxItemsValueLabel.alignment = .right
-        maxItemsValueLabel.widthAnchor.constraint(equalToConstant: 34).isActive = true
+        maxItemsValueLabel.widthAnchor.constraint(equalToConstant: 44).isActive = true
 
         maxItemsStepper.minValue = 10
-        maxItemsStepper.maxValue = 500
+        maxItemsStepper.maxValue = 5000
         maxItemsStepper.increment = 10
         maxItemsStepper.target = self
         maxItemsStepper.action = #selector(historyLimitChanged(_:))

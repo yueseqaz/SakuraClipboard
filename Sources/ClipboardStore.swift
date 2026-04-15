@@ -26,9 +26,9 @@ class ClipboardStore {
     static let shared = ClipboardStore()
     private static let textPreviewFetchLimit = 600
     private(set) var items: [ClipboardItem] = []
-    private let defaultMaxItems = 50
+    private let defaultMaxItems = 200
     private let minMaxItems = 10
-    private let hardMaxItems = 500
+    private let hardMaxItems = 5000
     private let maxItemsKey = "clipboard.maxItems"
     private let fileManager = FileManager.default
     private let dbLock = NSRecursiveLock()
