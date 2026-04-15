@@ -230,7 +230,7 @@ class ClipboardStore {
 
         sql += " ORDER BY is_favorite DESC, created_at DESC;"
 
-        return fetch(sql: sql, binders: bindings, includeImageData: true)
+        return fetch(sql: sql, binders: bindings, includeImageData: false)
     }
 
     private func finalizeChanges() {
@@ -387,7 +387,7 @@ class ClipboardStore {
             FROM clipboard_items
             ORDER BY is_favorite DESC, created_at DESC;
             """,
-            includeImageData: true
+            includeImageData: false
         )
     }
 
@@ -443,8 +443,12 @@ class ClipboardStore {
                         hasMoreText: textLength > text.count
                     )
                 )
-            } else if typeRaw == ClipboardItem.Kind.image.rawValue, let imageData {
-                result.append(ClipboardItem(id: id, imageData: imageData, date: Date(timeIntervalSince1970: createdAt), isFavorite: isFavorite))
+            } else if typeRaw == ClipboardItem.Kind.image.rawValue {
+                if let imageData {
+                    result.append(ClipboardItem(id: id, imageData: imageData, date: Date(timeIntervalSince1970: createdAt), isFavorite: isFavorite))
+                } else {
+                    result.append(ClipboardItem(id: id, imageDate: Date(timeIntervalSince1970: createdAt), isFavorite: isFavorite))
+                }
             }
         }
         sqlite3_finalize(stmt)

@@ -50,6 +50,17 @@ class ClipboardItem {
         self.hasMoreText = false
     }
 
+    init(id: String, imageDate: Date, isFavorite: Bool) {
+        self.id = id
+        self.kind = .image
+        self.text = nil
+        self.imageData = nil
+        self.date = imageDate
+        self.isFavorite = isFavorite
+        self.textLength = 0
+        self.hasMoreText = false
+    }
+
     convenience init?(id: String = UUID().uuidString, image: NSImage, date: Date = Date(), isFavorite: Bool = false) {
         guard let data = Self.makeImageData(from: image) else { return nil }
         self.init(id: id, imageData: data, date: date, isFavorite: isFavorite)

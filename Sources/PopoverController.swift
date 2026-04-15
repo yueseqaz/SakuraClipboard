@@ -578,7 +578,7 @@ class PopoverController: NSViewController {
             if let fullText = ClipboardStore.shared.fullText(for: item.id) ?? item.text {
                 pb.setString(fullText, forType: .string)
             }
-        } else if let i = item.image {
+        } else if let i = item.image ?? ClipboardStore.shared.image(for: item.id) {
             pb.writeObjects([i])
         }
     }
