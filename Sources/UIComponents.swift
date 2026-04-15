@@ -132,6 +132,7 @@ class ClipRowView: NSView {
     private var expandButton: NSButton?
     private var imageView: HoverPreviewImageView?
     private var isExpandedText = false
+    private var isHovering = false
     private let collapsedTextLines = 2
     private let expandedTextLines = 5
 
@@ -279,26 +280,52 @@ class ClipRowView: NSView {
         }
         let ta = NSTrackingArea(
             rect: .zero,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
             owner: self
         )
         addTrackingArea(ta)
     }
 
     override func mouseEntered(with event: NSEvent) {
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.15
-            bgLayer.backgroundColor = DS.surfaceHov.cgColor
-            bgLayer.borderColor = DS.accent.withAlphaComponent(0.3).cgColor
-        }
+        isHovering = true
+        applyHoverStyle()
     }
 
     override func mouseExited(with event: NSEvent) {
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.15
-            bgLayer.backgroundColor = DS.surface.cgColor
-            bgLayer.borderColor = DS.border.cgColor
+        isHovering = false
+        applyHoverStyle()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let localPoint = convert(event.locationInWindow, from: nil)
+        let hoveringNow = bounds.contains(localPoint)
+        guard hoveringNow != isHovering else { return }
+        isHovering = hoveringNow
+        applyHoverStyle()
+    }
+
+    private func applyHoverStyle() {
+        CATransaction.begin()
+        CATransaction.disableActions()
+        bgLayer.backgroundColor = isHovering ? DS.surfaceHov.cgColor : DS.surface.cgColor
+        bgLayer.borderColor = isHovering ? DS.accent.withAlphaComponent(0.3).cgColor : DS.border.cgColor
+        CATransaction.commit()
+    }
+
+    func syncHoverStateWithMouseLocation() {
+        guard let window else {
+            if isHovering {
+                isHovering = false
+                applyHoverStyle()
+            }
+            return
         }
+        let mouseInWindow = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        let mouseInSelf = convert(mouseInWindow, from: nil)
+        let hoveringNow = bounds.contains(mouseInSelf)
+        guard hoveringNow != isHovering else { return }
+        isHovering = hoveringNow
+        applyHoverStyle()
     }
 
     override func mouseDown(with event: NSEvent) {

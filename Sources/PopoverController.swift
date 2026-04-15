@@ -32,8 +32,18 @@ class PopoverController: NSViewController {
             self, selector: #selector(reload),
             name: .clipboardUpdated, object: nil
         )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(scrollBoundsChanged),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
+        scrollView.contentView.postsBoundsChangedNotifications = true
 
         DispatchQueue.main.async { self.reload() }
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func buildUI() {
@@ -558,6 +568,17 @@ class PopoverController: NSViewController {
             contentStack.addArrangedSubview(row)
             row.widthAnchor.constraint(equalToConstant: rowWidth).isActive = true
             row.hydrateDeferredContent()
+        }
+        syncVisibleRowsHoverState()
+    }
+
+    @objc private func scrollBoundsChanged() {
+        syncVisibleRowsHoverState()
+    }
+
+    private func syncVisibleRowsHoverState() {
+        for case let row as ClipRowView in contentStack.arrangedSubviews {
+            row.syncHoverStateWithMouseLocation()
         }
     }
 
