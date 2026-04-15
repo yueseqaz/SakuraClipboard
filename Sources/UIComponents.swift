@@ -123,7 +123,6 @@ class ClipRowView: NSView {
     let item: ClipboardItem
     var onCopy: ((ClipboardItem) -> Void)?
     var onToggleFavorite: ((ClipboardItem) -> Void)?
-    var onRequestFullText: ((ClipboardItem) -> String?)?
     var onRequestImage: ((ClipboardItem) -> NSImage?)?
     var onExpandChanged: ((ClipRowView, Bool) -> Void)?
 
