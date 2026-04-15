@@ -5,6 +5,7 @@ class ClipboardMonitor {
     private var changeCount = NSPasteboard.general.changeCount
     private var timer: Timer?
     private var idleTicks = 0
+    private let ingestQueue = DispatchQueue(label: "com.sakura.clipboard.ingest", qos: .userInitiated)
 
     private let fastInterval: TimeInterval = 0.2
     private let normalInterval: TimeInterval = 0.4
@@ -45,10 +46,14 @@ class ClipboardMonitor {
             }
         }
 
-        if let img = NSImage(pasteboard: pb) {
-            ClipboardStore.shared.addImage(img)
-        } else if let str = pb.string(forType: .string) {
-            ClipboardStore.shared.addText(str)
+        let imageData = pb.data(forType: .png) ?? pb.data(forType: .tiff)
+        let text = pb.string(forType: .string)
+        ingestQueue.async {
+            if let imageData {
+                ClipboardStore.shared.addImageData(imageData)
+            } else if let text {
+                ClipboardStore.shared.addText(text)
+            }
         }
     }
 }

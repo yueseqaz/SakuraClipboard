@@ -31,7 +31,14 @@ class ClipboardStore {
     private let hardMaxItems = 500
     private let maxItemsKey = "clipboard.maxItems"
     private let fileManager = FileManager.default
+    private let dbLock = NSRecursiveLock()
     private var db: OpaquePointer?
+
+    private func notifyClipboardUpdated() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .clipboardUpdated, object: nil)
+        }
+    }
 
     private var storeURL: URL = {
         let fallback = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -58,6 +65,8 @@ class ClipboardStore {
     }
 
     func addText(_ text: String) {
+        dbLock.lock()
+        defer { dbLock.unlock() }
         let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return }
         removeExistingText(cleaned)
@@ -67,7 +76,19 @@ class ClipboardStore {
     }
 
     func addImage(_ image: NSImage) {
+        dbLock.lock()
+        defer { dbLock.unlock() }
         guard let imageData = ClipboardItem.makeImageData(from: image) else { return }
+        addImageDataLocked(imageData)
+    }
+
+    func addImageData(_ imageData: Data) {
+        dbLock.lock()
+        defer { dbLock.unlock() }
+        addImageDataLocked(imageData)
+    }
+
+    private func addImageDataLocked(_ imageData: Data) {
         removeExistingImageData(imageData)
         let item = ClipboardItem(imageData: imageData)
         insert(item)
@@ -75,6 +96,8 @@ class ClipboardStore {
     }
 
     func updateFavorite(id: String, isFavorite: Bool) {
+        dbLock.lock()
+        defer { dbLock.unlock() }
         execute(
             "UPDATE clipboard_items SET is_favorite = ? WHERE id = ?;",
             bind: { stmt in
@@ -83,35 +106,43 @@ class ClipboardStore {
             }
         )
         loadAll()
-        NotificationCenter.default.post(name: .clipboardUpdated, object: nil)
+        notifyClipboardUpdated()
     }
 
     func toggleFavorite(id: String) {
+        dbLock.lock()
+        defer { dbLock.unlock() }
         let target = items.first(where: { $0.id == id })
         updateFavorite(id: id, isFavorite: !(target?.isFavorite ?? false))
     }
 
     func clear() {
+        dbLock.lock()
+        defer { dbLock.unlock() }
         execute("DELETE FROM clipboard_items;")
         items.removeAll()
-        NotificationCenter.default.post(name: .clipboardUpdated, object: nil)
+        notifyClipboardUpdated()
     }
 
     func clearStorage() {
+        dbLock.lock()
+        defer { dbLock.unlock() }
         closeDatabase()
         try? fileManager.removeItem(at: storeURL)
         openDatabase()
         createTablesIfNeeded()
         items.removeAll()
-        NotificationCenter.default.post(name: .clipboardUpdated, object: nil)
+        notifyClipboardUpdated()
     }
 
     func setMaxItems(_ newValue: Int) {
+        dbLock.lock()
+        defer { dbLock.unlock() }
         let clamped = max(minMaxItems, min(newValue, hardMaxItems))
         UserDefaults.standard.set(clamped, forKey: maxItemsKey)
         trim()
         loadAll()
-        NotificationCenter.default.post(name: .clipboardUpdated, object: nil)
+        notifyClipboardUpdated()
     }
 
     func storageLocationDescription() -> String {
@@ -125,6 +156,8 @@ class ClipboardStore {
     }
 
     func storageUsageDescription() -> String {
+        dbLock.lock()
+        defer { dbLock.unlock() }
         guard let attrs = try? fileManager.attributesOfItem(atPath: storeURL.path),
               let bytes = attrs[.size] as? Int64 else {
             return "0 B"
@@ -133,6 +166,8 @@ class ClipboardStore {
     }
 
     func fullText(for id: String) -> String? {
+        dbLock.lock()
+        defer { dbLock.unlock() }
         guard let db else { return nil }
         var stmt: OpaquePointer?
         let sql = "SELECT text FROM clipboard_items WHERE id = ? AND type = 0 LIMIT 1;"
@@ -147,6 +182,8 @@ class ClipboardStore {
     }
 
     func image(for id: String) -> NSImage? {
+        dbLock.lock()
+        defer { dbLock.unlock() }
         guard let db else { return nil }
         var stmt: OpaquePointer?
         let sql = "SELECT image_data FROM clipboard_items WHERE id = ? AND type = 1 LIMIT 1;"
@@ -163,6 +200,8 @@ class ClipboardStore {
     }
 
     func filteredItems(query: Query) -> [ClipboardItem] {
+        dbLock.lock()
+        defer { dbLock.unlock() }
         var sql = """
         SELECT id, type, text, image_data, created_at, is_favorite, length(text)
         FROM clipboard_items
@@ -197,7 +236,7 @@ class ClipboardStore {
     private func finalizeChanges() {
         trim()
         loadAll()
-        NotificationCenter.default.post(name: .clipboardUpdated, object: nil)
+        notifyClipboardUpdated()
     }
 
     private func thresholdDate(for filter: TimeFilter) -> Date? {
