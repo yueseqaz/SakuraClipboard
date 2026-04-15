@@ -2,6 +2,8 @@
 set -e
 
 APP_NAME="SakuraClipboard"
+APP_VERSION="1.0.1"
+APP_BUILD="101"
 BUILD_DIR="build"
 APP_BUNDLE="$APP_NAME.app"
 DMG_NAME="$APP_NAME.dmg"
@@ -92,6 +94,12 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<EOF
 
     <key>CFBundleIdentifier</key>
     <string>com.sakura.clipboard</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>$APP_VERSION</string>
+
+    <key>CFBundleVersion</key>
+    <string>$APP_BUILD</string>
 
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
