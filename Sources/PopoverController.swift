@@ -575,8 +575,11 @@ class PopoverController: NSViewController {
         let pb = NSPasteboard.general
         pb.clearContents()
         if item.kind == .text {
-            if let fullText = ClipboardStore.shared.fullText(for: item.id) ?? item.text {
-                pb.setString(fullText, forType: .string)
+            let textToCopy = item.hasMoreText
+                ? (ClipboardStore.shared.fullText(for: item.id) ?? item.text)
+                : item.text
+            if let textToCopy {
+                pb.setString(textToCopy, forType: .string)
             }
         } else if let i = item.image ?? ClipboardStore.shared.image(for: item.id) {
             pb.writeObjects([i])
