@@ -140,15 +140,20 @@ class PopoverController: NSViewController {
         searchField.sendsSearchStringImmediately = true
         searchField.translatesAutoresizingMaskIntoConstraints = false
 
+        let previousTypeIndex = max(typeFilter.indexOfSelectedItem, 0)
+        typeFilter.removeAllItems()
         typeFilter.addItems(withTitles: [
             I18N.t("全部类型", "All Types"),
             I18N.t("仅文本", "Text Only"),
             I18N.t("仅图片", "Image Only")
         ])
+        typeFilter.selectItem(at: min(previousTypeIndex, typeFilter.numberOfItems - 1))
         typeFilter.controlSize = .large
         typeFilter.target = self
         typeFilter.action = #selector(filtersChanged)
 
+        let previousTimeIndex = max(timeFilter.indexOfSelectedItem, 0)
+        timeFilter.removeAllItems()
         timeFilter.addItems(withTitles: [
             I18N.t("全部时间", "All Time"),
             I18N.t("最近1小时", "Last 1 Hour"),
@@ -156,6 +161,7 @@ class PopoverController: NSViewController {
             I18N.t("最近7天", "Last 7 Days"),
             I18N.t("最近30天", "Last 30 Days")
         ])
+        timeFilter.selectItem(at: min(previousTimeIndex, timeFilter.numberOfItems - 1))
         timeFilter.controlSize = .large
         timeFilter.target = self
         timeFilter.action = #selector(filtersChanged)
@@ -534,9 +540,6 @@ class PopoverController: NSViewController {
             }
             row.onToggleFavorite = { itm in
                 ClipboardStore.shared.toggleFavorite(id: itm.id)
-            }
-            row.onRequestFullText = { itm in
-                ClipboardStore.shared.fullText(for: itm.id)
             }
             row.onRequestImage = { itm in
                 ClipboardStore.shared.image(for: itm.id)

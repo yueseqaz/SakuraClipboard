@@ -133,9 +133,8 @@ class ClipRowView: NSView {
     private var expandButton: NSButton?
     private var imageView: HoverPreviewImageView?
     private var isExpandedText = false
-    private var hasLoadedFullText = false
     private let collapsedTextLines = 2
-    private let expandedTextLines = 0
+    private let expandedTextLines = 5
 
     init(item: ClipboardItem) {
         self.item = item
@@ -235,7 +234,7 @@ class ClipRowView: NSView {
                 stack.addArrangedSubview(meta)
                 textMetaLabel = meta
 
-                let expandBtn = NSButton(title: I18N.t("展开", "Expand"), target: self, action: #selector(toggleTextExpand))
+                let expandBtn = NSButton(title: I18N.t("展开到 5 行", "Expand to 5 lines"), target: self, action: #selector(toggleTextExpand))
                 expandBtn.bezelStyle = .inline
                 expandBtn.isBordered = false
                 expandBtn.font = DS.fontSmall
@@ -335,20 +334,14 @@ class ClipRowView: NSView {
     private func applyExpandedState(notify: Bool) {
         guard let label = textLabel else { return }
 
-        if isExpandedText, item.hasMoreText, !hasLoadedFullText,
-           let full = onRequestFullText?(item), !full.isEmpty {
-            label.stringValue = full
-            hasLoadedFullText = true
-        }
-
         label.maximumNumberOfLines = isExpandedText ? expandedTextLines : collapsedTextLines
         label.cell?.truncatesLastVisibleLine = !isExpandedText
-        expandButton?.title = isExpandedText ? I18N.t("收起", "Collapse") : I18N.t("展开", "Expand")
+        expandButton?.title = isExpandedText ? I18N.t("收起", "Collapse") : I18N.t("展开到 5 行", "Expand to 5 lines")
 
         if let meta = textMetaLabel {
             let count = max(item.textLength, label.stringValue.count)
             meta.stringValue = isExpandedText
-                ? I18N.t("完整内容预览中 · \(count) 字符", "Full preview · \(count) chars")
+                ? I18N.t("已展开前 5 行 · \(count) 字符预览", "Showing first 5 lines · \(count) chars preview")
                 : I18N.t("已自动折叠 · \(count) 字符", "Collapsed · \(count) chars")
         }
 
@@ -357,7 +350,7 @@ class ClipRowView: NSView {
         }
 
         needsLayout = true
-        superview?.layoutSubtreeIfNeeded()
+        superview?.needsLayout = true
     }
 
     @objc private func toggleFavorite() {

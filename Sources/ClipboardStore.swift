@@ -133,13 +133,17 @@ class ClipboardStore {
     }
 
     func fullText(for id: String) -> String? {
-        let rows = fetch(
-            sql: "SELECT id, type, text, image_data, created_at, is_favorite, length(text) FROM clipboard_items WHERE id = ? LIMIT 1;",
-            binders: [{ stmt, i in sqlite3_bind_text(stmt, i, id, -1, SQLITE_TRANSIENT) }],
-            truncateText: false,
-            includeImageData: false
-        )
-        return rows.first?.text
+        guard let db else { return nil }
+        var stmt: OpaquePointer?
+        let sql = "SELECT text FROM clipboard_items WHERE id = ? AND type = 0 LIMIT 1;"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            return nil
+        }
+        sqlite3_bind_text(stmt, 1, id, -1, SQLITE_TRANSIENT)
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        guard let cText = sqlite3_column_text(stmt, 0) else { return nil }
+        return String(cString: cText)
     }
 
     func image(for id: String) -> NSImage? {
@@ -187,7 +191,7 @@ class ClipboardStore {
 
         sql += " ORDER BY is_favorite DESC, created_at DESC;"
 
-        return fetch(sql: sql, binders: bindings, includeImageData: false)
+        return fetch(sql: sql, binders: bindings, includeImageData: true)
     }
 
     private func finalizeChanges() {
@@ -344,7 +348,7 @@ class ClipboardStore {
             FROM clipboard_items
             ORDER BY is_favorite DESC, created_at DESC;
             """,
-            includeImageData: false
+            includeImageData: true
         )
     }
 
