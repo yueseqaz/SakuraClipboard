@@ -9,23 +9,11 @@ class ClipboardStore {
         case image = 1
     }
 
-    enum TimeFilter: Int {
-        case all
-        case lastHour
-        case today
-        case last7Days
-        case last30Days
-    }
-
     struct Query {
         let keyword: String
         let filterType: FilterType
-        let timeFilter: TimeFilter
+        let favoritesOnly: Bool
         let favoriteFolder: String?
-    }
-
-    enum QueryFolderFilter {
-        static let unfavoritedOnly = "__UNFAVORITED_ONLY__"
     }
 
     static let shared = ClipboardStore()
@@ -137,19 +125,8 @@ class ClipboardStore {
     func clear() {
         dbLock.lock()
         defer { dbLock.unlock() }
-        execute("DELETE FROM clipboard_items;")
-        items.removeAll()
-        notifyClipboardUpdated()
-    }
-
-    func clearStorage() {
-        dbLock.lock()
-        defer { dbLock.unlock() }
-        closeDatabase()
-        try? fileManager.removeItem(at: storeURL)
-        openDatabase()
-        createTablesIfNeeded()
-        items.removeAll()
+        execute("DELETE FROM clipboard_items WHERE is_favorite = 0;")
+        loadAll()
         notifyClipboardUpdated()
     }
 
@@ -261,22 +238,15 @@ class ClipboardStore {
             bindings.append { stmt, i in sqlite3_bind_int(stmt, i, Int32(typeRaw)) }
         }
 
-        if let threshold = thresholdDate(for: query.timeFilter) {
-            sql += " AND created_at >= ?"
-            let ts = threshold.timeIntervalSince1970
-            bindings.append { stmt, i in sqlite3_bind_double(stmt, i, ts) }
-        }
-
-        if let folder = query.favoriteFolder {
-            if folder == QueryFolderFilter.unfavoritedOnly {
-                sql += " AND is_favorite = 0"
-            } else {
-                sql += " AND is_favorite = 1 AND favorite_folder = ?"
+        if query.favoritesOnly {
+            sql += " AND is_favorite = 1"
+            if let folder = query.favoriteFolder {
+                sql += " AND favorite_folder = ?"
                 bindings.append { stmt, i in sqlite3_bind_text(stmt, i, folder, -1, SQLITE_TRANSIENT) }
             }
         }
 
-        sql += " ORDER BY is_favorite DESC, created_at DESC;"
+        sql += " ORDER BY created_at DESC;"
 
         return fetch(sql: sql, binders: bindings)
     }
@@ -285,23 +255,6 @@ class ClipboardStore {
         trim()
         loadAll()
         notifyClipboardUpdated()
-    }
-
-    private func thresholdDate(for filter: TimeFilter) -> Date? {
-        let now = Date()
-        let calendar = Calendar.current
-        switch filter {
-        case .all:
-            return nil
-        case .lastHour:
-            return now.addingTimeInterval(-3600)
-        case .today:
-            return calendar.startOfDay(for: now)
-        case .last7Days:
-            return now.addingTimeInterval(-7 * 24 * 3600)
-        case .last30Days:
-            return now.addingTimeInterval(-30 * 24 * 3600)
-        }
     }
 
     private func openDatabase() {
@@ -448,7 +401,7 @@ class ClipboardStore {
             WHERE id IN (
                 SELECT id
                 FROM clipboard_items
-                ORDER BY is_favorite DESC, created_at DESC
+                ORDER BY created_at DESC
                 LIMIT -1 OFFSET ?
             );
             """,
@@ -464,7 +417,7 @@ class ClipboardStore {
             sql: """
             SELECT id, type, \(selectText), NULL AS image_data, created_at, is_favorite, length(text), favorite_folder
             FROM clipboard_items
-            ORDER BY is_favorite DESC, created_at DESC;
+            ORDER BY created_at DESC;
             """
         )
     }

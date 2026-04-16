@@ -5,6 +5,7 @@ import ServiceManagement
 class PopoverController: NSViewController, NSTextFieldDelegate {
     private let popoverWidth: CGFloat = 338
     private let rowWidth: CGFloat = 314
+    private let footerHeight: CGFloat = 92
     private let scrollView = NSScrollView()
     private let contentStack = NSStackView()
     private var copiedToast: NSView?
@@ -14,7 +15,6 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
     private let storageUsageLabel = NSTextField(labelWithString: "")
     private let searchField = NSSearchField()
     private let typeFilter = NSPopUpButton()
-    private let timeFilter = NSPopUpButton()
     private let favoriteFolderFilter = NSPopUpButton()
     private let languageFilter = NSPopUpButton()
     private weak var expandedRow: ClipRowView?
@@ -115,7 +115,7 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
             footer.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             footer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             footer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            footer.heightAnchor.constraint(equalToConstant: 130)
+            footer.heightAnchor.constraint(equalToConstant: footerHeight)
         ])
     }
 
@@ -144,7 +144,7 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         left.spacing = 8
         left.translatesAutoresizingMaskIntoConstraints = false
 
-        let clearBtn = makeTextButton(I18N.t("清空", "Clear"), color: DS.danger)
+        let clearBtn = makeTextButton(I18N.t("清空未收藏", "Clear Others"), color: DS.danger)
         clearBtn.target = self
         clearBtn.action = #selector(clearAll)
         clearBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -158,42 +158,30 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         let previousTypeIndex = max(typeFilter.indexOfSelectedItem, 0)
         typeFilter.removeAllItems()
         typeFilter.addItems(withTitles: [
-            I18N.t("全部类型", "All Types"),
-            I18N.t("仅文本", "Text Only"),
-            I18N.t("仅图片", "Image Only")
+            I18N.t("全部", "All"),
+            I18N.t("文本", "Text"),
+            I18N.t("图片", "Image"),
+            I18N.t("收藏", "Favorites")
         ])
         typeFilter.selectItem(at: min(previousTypeIndex, typeFilter.numberOfItems - 1))
         typeFilter.controlSize = .large
         typeFilter.target = self
         typeFilter.action = #selector(filtersChanged)
 
-        let previousTimeIndex = max(timeFilter.indexOfSelectedItem, 0)
-        timeFilter.removeAllItems()
-        timeFilter.addItems(withTitles: [
-            I18N.t("全部时间", "All Time"),
-            I18N.t("最近1小时", "Last 1 Hour"),
-            I18N.t("今天", "Today"),
-            I18N.t("最近7天", "Last 7 Days"),
-            I18N.t("最近30天", "Last 30 Days")
-        ])
-        timeFilter.selectItem(at: min(previousTimeIndex, timeFilter.numberOfItems - 1))
-        timeFilter.controlSize = .large
-        timeFilter.target = self
-        timeFilter.action = #selector(filtersChanged)
-
         refreshFavoriteFolderFilterOptions(preserveSelection: true)
         favoriteFolderFilter.controlSize = .large
         favoriteFolderFilter.target = self
         favoriteFolderFilter.action = #selector(filtersChanged)
+        updateFavoriteFolderFilterState()
 
         let topRow = NSStackView(views: [left, NSView(), clearBtn])
         topRow.orientation = .horizontal
         topRow.spacing = 8
         topRow.alignment = .centerY
 
-        let filterRow = NSStackView(views: [typeFilter, timeFilter, favoriteFolderFilter])
+        let filterRow = NSStackView(views: [typeFilter, favoriteFolderFilter])
         filterRow.orientation = .horizontal
-        filterRow.spacing = 6
+        filterRow.spacing = 8
         filterRow.alignment = .centerY
 
         let stack = NSStackView(views: [topRow, searchField, filterRow])
@@ -207,9 +195,8 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
             stack.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: -12),
             stack.topAnchor.constraint(equalTo: v.topAnchor, constant: 8),
             stack.bottomAnchor.constraint(equalTo: v.bottomAnchor, constant: -8),
-            typeFilter.widthAnchor.constraint(equalToConstant: 84),
-            timeFilter.widthAnchor.constraint(equalToConstant: 84),
-            favoriteFolderFilter.widthAnchor.constraint(equalToConstant: 120)
+            typeFilter.widthAnchor.constraint(equalToConstant: 88),
+            favoriteFolderFilter.widthAnchor.constraint(equalToConstant: 170)
         ])
 
         return v
@@ -219,10 +206,6 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         let v = NSView()
         v.wantsLayer = true
         v.layer?.backgroundColor = DS.surface.cgColor
-
-        // Top border
-        let border = CALayer()
-        border.backgroundColor = DS.border.cgColor
 
         // Launch at login toggle
         let loginLabel = NSTextField(labelWithString: I18N.t("开机自启", "Launch at Login"))
@@ -261,10 +244,6 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         limitGroup.alignment = .centerY
 
         // Buttons
-        let clearStorageBtn = makeTextButton(I18N.t("清理存储", "Clear Storage"), color: DS.danger)
-        clearStorageBtn.target = self
-        clearStorageBtn.action = #selector(clearStorage)
-
         let quitBtn = makeTextButton(I18N.t("退出", "Quit"), color: DS.textSec)
         quitBtn.target = self
         quitBtn.action = #selector(quitApp)
@@ -279,9 +258,9 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         languageFilter.target = self
         languageFilter.action = #selector(languageChanged)
 
-        let row1 = NSStackView(views: [toggleGroup, NSView(), languageFilter, limitGroup])
+        let row1 = NSStackView(views: [toggleGroup, languageFilter, limitGroup])
         row1.orientation = .horizontal
-        row1.spacing = 8
+        row1.spacing = 10
         row1.alignment = .centerY
 
         storageUsageLabel.font = DS.fontSmall
@@ -291,9 +270,9 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         openFinderBtn.target = self
         openFinderBtn.action = #selector(openStorageInFinder)
 
-        let row2 = NSStackView(views: [storageUsageLabel, NSView(), openFinderBtn, aboutBtn, clearStorageBtn, quitBtn])
+        let row2 = NSStackView(views: [storageUsageLabel, openFinderBtn, aboutBtn, quitBtn])
         row2.orientation = .horizontal
-        row2.spacing = 8
+        row2.spacing = 10
         row2.alignment = .centerY
 
         let stack = NSStackView(views: [row1, row2])
@@ -308,8 +287,6 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
             stack.centerYAnchor.constraint(equalTo: v.centerYAnchor)
         ])
 
-        border.frame = CGRect(x: 0, y: 129, width: popoverWidth, height: 1)
-        v.layer?.addSublayer(border)
         refreshMetaLabels()
 
         return v
@@ -356,18 +333,13 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
 
     @objc private func clearAll() {
         guard confirm(
-            title: I18N.t("确认清空历史？", "Clear all history?"),
-            message: I18N.t("将删除所有历史记录（含收藏）。此操作不可撤销。", "This will delete all history (including favorites). This action cannot be undone.")
+            title: I18N.t("确认清空未收藏内容？", "Clear non-favorites?"),
+            message: I18N.t(
+                "此操作只会删除未收藏条目，已收藏内容会保留。若想删除某个收藏条目，请先取消收藏，再执行清空。",
+                "This only removes unfavorited items and keeps favorites. To remove a favorite item, unfavorite it first, then clear."
+            )
         ) else { return }
         ClipboardStore.shared.clear()
-    }
-
-    @objc private func clearStorage() {
-        guard confirm(
-            title: I18N.t("确认清理存储？", "Clear storage?"),
-            message: I18N.t("将删除 SQLite 历史数据库文件并清空记录。", "This will remove the SQLite history database and clear all records.")
-        ) else { return }
-        ClipboardStore.shared.clearStorage()
         refreshMetaLabels()
     }
 
@@ -400,29 +372,29 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
 
         let title = NSTextField(labelWithString: "SakuraClipboard")
         title.font = NSFont.systemFont(ofSize: 24, weight: .semibold)
-        title.textColor = DS.textPrimary
+        title.textColor = .labelColor
 
         let subtitle = NSTextField(labelWithString: I18N.t(
             "轻量、快速、可搜索的剪贴板历史工具",
             "A lightweight, fast, searchable clipboard history tool"
         ))
         subtitle.font = NSFont.systemFont(ofSize: 14, weight: .medium)
-        subtitle.textColor = DS.textSec
+        subtitle.textColor = .secondaryLabelColor
 
         let features = NSTextField(wrappingLabelWithString: I18N.t(
-            "• 文本/图片历史\n• 关键词、类型、时间过滤\n• 收藏固定与误清空确认\n• SQLite 持久化与更大历史支持",
-            "• Text/Image history\n• Filter by keyword/type/time\n• Favorites and clear confirmation\n• SQLite persistence for larger history"
+            "• 文本/图片历史\n• 关键词、类型、时间过滤\n• 收藏保留与安全清空\n• SQLite 持久化与更大历史支持",
+            "• Text/Image history\n• Filter by keyword/type/time\n• Favorite-safe clearing\n• SQLite persistence for larger history"
         ))
         features.font = NSFont.systemFont(ofSize: 13)
-        features.textColor = DS.textPrimary
+        features.textColor = .labelColor
 
         let version = NSTextField(labelWithString: I18N.t("版本：1.0.0", "Version: 1.0.0"))
         version.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        version.textColor = DS.textSec
+        version.textColor = .secondaryLabelColor
 
         let author = NSTextField(labelWithString: I18N.t("作者：Sakura", "Author: Sakura"))
         author.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        author.textColor = DS.accent
+        author.textColor = .controlAccentColor
 
         let stack = NSStackView(views: [title, subtitle, features, version, author])
         stack.orientation = .vertical
@@ -607,10 +579,9 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
 
         let folders = ClipboardStore.shared.allFavoriteFolders()
         favoriteFolderFilter.removeAllItems()
-        favoriteFolderValues = [nil, ClipboardStore.QueryFolderFilter.unfavoritedOnly] + folders.map { Optional($0) }
+        favoriteFolderValues = [nil] + folders.map { Optional($0) }
         favoriteFolderFilter.addItems(withTitles: [
-            I18N.t("全部项目", "All Items"),
-            I18N.t("仅未收藏", "Unfavorited Only")
+            I18N.t("全部收藏", "All Favorites")
         ] + folders)
 
         if let oldValue, let idx = favoriteFolderValues.firstIndex(where: { $0 == oldValue }) {
@@ -618,31 +589,33 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         } else {
             favoriteFolderFilter.selectItem(at: 0)
         }
+
+        updateFavoriteFolderFilterState()
+    }
+
+    private func updateFavoriteFolderFilterState() {
+        let isFavoriteMode = typeFilter.indexOfSelectedItem == 3
+        favoriteFolderFilter.isEnabled = isFavoriteMode
+        favoriteFolderFilter.alphaValue = isFavoriteMode ? 1 : 0.55
     }
 
     private func currentQuery() -> ClipboardStore.Query {
         let type: ClipboardStore.FilterType
+        let favoritesOnly = typeFilter.indexOfSelectedItem == 3
         switch typeFilter.indexOfSelectedItem {
         case 1: type = .text
         case 2: type = .image
         default: type = .all
         }
 
-        let time: ClipboardStore.TimeFilter
-        switch timeFilter.indexOfSelectedItem {
-        case 1: time = .lastHour
-        case 2: time = .today
-        case 3: time = .last7Days
-        case 4: time = .last30Days
-        default: time = .all
-        }
-
-        let selectedFolder = favoriteFolderValues[safe: favoriteFolderFilter.indexOfSelectedItem] ?? nil
+        let selectedFolder = favoritesOnly
+            ? (favoriteFolderValues[safe: favoriteFolderFilter.indexOfSelectedItem] ?? nil)
+            : nil
 
         return ClipboardStore.Query(
             keyword: searchField.stringValue,
             filterType: type,
-            timeFilter: time,
+            favoritesOnly: favoritesOnly,
             favoriteFolder: selectedFolder
         )
     }
@@ -754,7 +727,7 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         var parts: [String] = []
         parts.append(query.keyword)
         parts.append("\(query.filterType.rawValue)")
-        parts.append("\(query.timeFilter.rawValue)")
+        parts.append(query.favoritesOnly ? "1" : "0")
         parts.append(query.favoriteFolder ?? "")
         parts.append(pendingFavoriteItemID ?? "")
         parts.append("\(items.count)")

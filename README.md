@@ -12,7 +12,7 @@ SakuraClipboard is a lightweight macOS clipboard history app focused on fast acc
 - SQLite-based persistence for larger history and fast lookup
 - Adjustable history limit with storage usage visibility
 - Open storage location in Finder for quick inspection
-- Safe clear actions with confirmation dialogs
+- Safe clear actions that keep favorites intact
 - Chinese/English interface switching
 - Launch at login support
 
