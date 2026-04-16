@@ -2,7 +2,7 @@ import Cocoa
 import ServiceManagement
 
 // MARK: - PopoverController
-class PopoverController: NSViewController {
+class PopoverController: NSViewController, NSTextFieldDelegate {
     private let popoverWidth: CGFloat = 338
     private let rowWidth: CGFloat = 314
     private let scrollView = NSScrollView()
@@ -15,10 +15,16 @@ class PopoverController: NSViewController {
     private let searchField = NSSearchField()
     private let typeFilter = NSPopUpButton()
     private let timeFilter = NSPopUpButton()
+    private let favoriteFolderFilter = NSPopUpButton()
     private let languageFilter = NSPopUpButton()
     private weak var expandedRow: ClipRowView?
     private var searchDebounceWorkItem: DispatchWorkItem?
     private var lastRenderSignature = ""
+    private var favoriteFolderValues: [String?] = [nil]
+    private var pendingFavoriteItemID: String?
+    private var pendingFavoriteDraftFolder: String = ""
+    private let favoriteInlineInput = NSTextField()
+    private let favoriteInlinePicker = NSPopUpButton()
     private var aboutWindowController: NSWindowController?
 
     override func loadView() {
@@ -95,7 +101,7 @@ class PopoverController: NSViewController {
             header.topAnchor.constraint(equalTo: view.topAnchor),
             header.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             header.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            header.heightAnchor.constraint(equalToConstant: 102),
+            header.heightAnchor.constraint(equalToConstant: 132),
 
             divider.topAnchor.constraint(equalTo: header.bottomAnchor),
             divider.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
@@ -109,7 +115,7 @@ class PopoverController: NSViewController {
             footer.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             footer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             footer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            footer.heightAnchor.constraint(equalToConstant: 86)
+            footer.heightAnchor.constraint(equalToConstant: 130)
         ])
     }
 
@@ -148,7 +154,6 @@ class PopoverController: NSViewController {
         searchField.target = self
         searchField.action = #selector(searchTextChanged)
         searchField.sendsSearchStringImmediately = true
-        searchField.translatesAutoresizingMaskIntoConstraints = false
 
         let previousTypeIndex = max(typeFilter.indexOfSelectedItem, 0)
         typeFilter.removeAllItems()
@@ -176,29 +181,35 @@ class PopoverController: NSViewController {
         timeFilter.target = self
         timeFilter.action = #selector(filtersChanged)
 
-        let filterRow = NSStackView(views: [searchField, typeFilter, timeFilter])
+        refreshFavoriteFolderFilterOptions(preserveSelection: true)
+        favoriteFolderFilter.controlSize = .large
+        favoriteFolderFilter.target = self
+        favoriteFolderFilter.action = #selector(filtersChanged)
+
+        let topRow = NSStackView(views: [left, NSView(), clearBtn])
+        topRow.orientation = .horizontal
+        topRow.spacing = 8
+        topRow.alignment = .centerY
+
+        let filterRow = NSStackView(views: [typeFilter, timeFilter, favoriteFolderFilter])
         filterRow.orientation = .horizontal
         filterRow.spacing = 6
         filterRow.alignment = .centerY
-        filterRow.translatesAutoresizingMaskIntoConstraints = false
 
-        v.addSubview(left)
-        v.addSubview(clearBtn)
-        v.addSubview(filterRow)
+        let stack = NSStackView(views: [topRow, searchField, filterRow])
+        stack.orientation = .vertical
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        v.addSubview(stack)
 
         NSLayoutConstraint.activate([
-            left.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 14),
-            left.topAnchor.constraint(equalTo: v.topAnchor, constant: 8),
-
-            clearBtn.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: -14),
-            clearBtn.centerYAnchor.constraint(equalTo: left.centerYAnchor),
-
-            filterRow.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 12),
-            filterRow.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: -12),
-            filterRow.bottomAnchor.constraint(equalTo: v.bottomAnchor, constant: -8),
-            searchField.widthAnchor.constraint(greaterThanOrEqualToConstant: 132),
-            typeFilter.widthAnchor.constraint(equalToConstant: 98),
-            timeFilter.widthAnchor.constraint(equalToConstant: 98)
+            stack.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: -12),
+            stack.topAnchor.constraint(equalTo: v.topAnchor, constant: 8),
+            stack.bottomAnchor.constraint(equalTo: v.bottomAnchor, constant: -8),
+            typeFilter.widthAnchor.constraint(equalToConstant: 84),
+            timeFilter.widthAnchor.constraint(equalToConstant: 84),
+            favoriteFolderFilter.widthAnchor.constraint(equalToConstant: 120)
         ])
 
         return v
@@ -270,7 +281,7 @@ class PopoverController: NSViewController {
 
         let row1 = NSStackView(views: [toggleGroup, NSView(), languageFilter, limitGroup])
         row1.orientation = .horizontal
-        row1.spacing = 10
+        row1.spacing = 8
         row1.alignment = .centerY
 
         storageUsageLabel.font = DS.fontSmall
@@ -282,12 +293,12 @@ class PopoverController: NSViewController {
 
         let row2 = NSStackView(views: [storageUsageLabel, NSView(), openFinderBtn, aboutBtn, clearStorageBtn, quitBtn])
         row2.orientation = .horizontal
-        row2.spacing = 10
+        row2.spacing = 8
         row2.alignment = .centerY
 
         let stack = NSStackView(views: [row1, row2])
         stack.orientation = .vertical
-        stack.spacing = 6
+        stack.spacing = 4
         stack.translatesAutoresizingMaskIntoConstraints = false
         v.addSubview(stack)
 
@@ -297,7 +308,7 @@ class PopoverController: NSViewController {
             stack.centerYAnchor.constraint(equalTo: v.centerYAnchor)
         ])
 
-        border.frame = CGRect(x: 0, y: 85, width: popoverWidth, height: 1)
+        border.frame = CGRect(x: 0, y: 129, width: popoverWidth, height: 1)
         v.layer?.addSublayer(border)
         refreshMetaLabels()
 
@@ -461,6 +472,154 @@ class PopoverController: NSViewController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: job)
     }
 
+    private func handleFavoriteToggle(for item: ClipboardItem) {
+        if item.isFavorite {
+            ClipboardStore.shared.updateFavorite(id: item.id, isFavorite: false)
+            if pendingFavoriteItemID == item.id {
+                cancelInlineFavoriteEditing()
+            }
+            return
+        }
+
+        if pendingFavoriteItemID == item.id {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.view.window?.makeFirstResponder(self.favoriteInlineInput)
+            }
+            return
+        }
+
+        pendingFavoriteItemID = item.id
+        pendingFavoriteDraftFolder = item.favoriteFolder ?? ""
+        reload()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.view.window?.makeFirstResponder(self.favoriteInlineInput)
+        }
+    }
+
+    private func makeInlineFavoriteEditorView(for item: ClipboardItem) -> NSView {
+        let card = NSView()
+        card.wantsLayer = true
+        card.layer?.backgroundColor = DS.surfaceHov.cgColor
+        card.layer?.cornerRadius = DS.radiusSm
+        card.layer?.borderWidth = 1
+        card.layer?.borderColor = DS.accent.withAlphaComponent(0.18).cgColor
+
+        let title = NSTextField(labelWithString: I18N.t("收藏到当前收藏夹", "Save to folder"))
+        title.font = DS.fontSmall
+        title.textColor = DS.textPrimary
+
+        let hintText: String
+        if let text = item.text, !text.isEmpty {
+            hintText = String(text.prefix(18))
+        } else {
+            hintText = I18N.t("图片内容", "Image item")
+        }
+        let subtitle = NSTextField(labelWithString: I18N.t("当前项目：\(hintText)", "Current item: \(hintText)"))
+        subtitle.font = DS.fontSmall
+        subtitle.textColor = DS.textSec.withAlphaComponent(0.9)
+        subtitle.lineBreakMode = .byTruncatingTail
+
+        favoriteInlineInput.placeholderString = I18N.t("输入新收藏夹名称", "Enter a new folder name")
+        favoriteInlineInput.stringValue = pendingFavoriteDraftFolder
+        favoriteInlineInput.font = DS.fontLabel
+        favoriteInlineInput.delegate = self
+        favoriteInlineInput.target = self
+        favoriteInlineInput.action = #selector(saveInlineFavoriteFolder)
+
+        favoriteInlinePicker.removeAllItems()
+        favoriteInlinePicker.addItem(withTitle: I18N.t("已有收藏夹", "Existing folders"))
+        favoriteInlinePicker.addItems(withTitles: ClipboardStore.shared.allFavoriteFolders())
+        favoriteInlinePicker.target = self
+        favoriteInlinePicker.action = #selector(inlineFavoritePickerChanged(_:))
+
+        let saveBtn = NSButton(title: I18N.t("保存", "Save"), target: self, action: #selector(saveInlineFavoriteFolder))
+        saveBtn.bezelStyle = .rounded
+        saveBtn.controlSize = .small
+        saveBtn.keyEquivalent = "\r"
+
+        let cancelBtn = NSButton(title: I18N.t("取消", "Cancel"), target: self, action: #selector(cancelInlineFavoriteFolder))
+        cancelBtn.bezelStyle = .rounded
+        cancelBtn.controlSize = .small
+
+        let titleRow = NSStackView(views: [title, NSView(), cancelBtn, saveBtn])
+        titleRow.orientation = .horizontal
+        titleRow.spacing = 8
+        titleRow.alignment = .centerY
+
+        let inputRow = NSStackView(views: [favoriteInlineInput, favoriteInlinePicker])
+        inputRow.orientation = .horizontal
+        inputRow.spacing = 8
+        inputRow.alignment = .centerY
+
+        favoriteInlinePicker.widthAnchor.constraint(equalToConstant: 118).isActive = true
+
+        let stack = NSStackView(views: [titleRow, subtitle, inputRow])
+        stack.orientation = .vertical
+        stack.spacing = 6
+        stack.edgeInsets = NSEdgeInsets(top: 9, left: 12, bottom: 9, right: 12)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: card.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: card.bottomAnchor)
+        ])
+
+        return card
+    }
+
+    @objc private func inlineFavoritePickerChanged(_ sender: NSPopUpButton) {
+        guard sender.indexOfSelectedItem > 0 else { return }
+        favoriteInlineInput.stringValue = sender.titleOfSelectedItem ?? ""
+        pendingFavoriteDraftFolder = favoriteInlineInput.stringValue
+    }
+
+    @objc private func saveInlineFavoriteFolder() {
+        guard let id = pendingFavoriteItemID else { return }
+        let cleaned = favoriteInlineInput.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        ClipboardStore.shared.updateFavorite(id: id, isFavorite: true, folderName: cleaned.isEmpty ? nil : cleaned)
+        cancelInlineFavoriteEditing()
+    }
+
+    @objc private func cancelInlineFavoriteFolder() {
+        cancelInlineFavoriteEditing()
+    }
+
+    private func cancelInlineFavoriteEditing() {
+        pendingFavoriteItemID = nil
+        pendingFavoriteDraftFolder = ""
+        favoriteInlineInput.stringValue = ""
+        favoriteInlinePicker.removeAllItems()
+        reload()
+    }
+
+    func controlTextDidChange(_ obj: Notification) {
+        guard let field = obj.object as? NSTextField, field === favoriteInlineInput else { return }
+        pendingFavoriteDraftFolder = favoriteInlineInput.stringValue
+    }
+
+    private func refreshFavoriteFolderFilterOptions(preserveSelection: Bool) {
+        let oldValue = preserveSelection ? favoriteFolderValues[safe: favoriteFolderFilter.indexOfSelectedItem] ?? nil : nil
+
+        let folders = ClipboardStore.shared.allFavoriteFolders()
+        favoriteFolderFilter.removeAllItems()
+        favoriteFolderValues = [nil, ClipboardStore.QueryFolderFilter.unfavoritedOnly] + folders.map { Optional($0) }
+        favoriteFolderFilter.addItems(withTitles: [
+            I18N.t("全部项目", "All Items"),
+            I18N.t("仅未收藏", "Unfavorited Only")
+        ] + folders)
+
+        if let oldValue, let idx = favoriteFolderValues.firstIndex(where: { $0 == oldValue }) {
+            favoriteFolderFilter.selectItem(at: idx)
+        } else {
+            favoriteFolderFilter.selectItem(at: 0)
+        }
+    }
+
     private func currentQuery() -> ClipboardStore.Query {
         let type: ClipboardStore.FilterType
         switch typeFilter.indexOfSelectedItem {
@@ -478,10 +637,13 @@ class PopoverController: NSViewController {
         default: time = .all
         }
 
+        let selectedFolder = favoriteFolderValues[safe: favoriteFolderFilter.indexOfSelectedItem] ?? nil
+
         return ClipboardStore.Query(
             keyword: searchField.stringValue,
             filterType: type,
-            timeFilter: time
+            timeFilter: time,
+            favoriteFolder: selectedFolder
         )
     }
 
@@ -548,8 +710,8 @@ class PopoverController: NSViewController {
                 self?.copyToClipboard(itm)
                 self?.showCopiedToast()
             }
-            row.onToggleFavorite = { itm in
-                ClipboardStore.shared.toggleFavorite(id: itm.id)
+            row.onToggleFavorite = { [weak self] itm in
+                self?.handleFavoriteToggle(for: itm)
             }
             row.onRequestImage = { itm in
                 ClipboardStore.shared.image(for: itm.id)
@@ -568,6 +730,12 @@ class PopoverController: NSViewController {
             contentStack.addArrangedSubview(row)
             row.widthAnchor.constraint(equalToConstant: rowWidth).isActive = true
             row.hydrateDeferredContent()
+
+            if pendingFavoriteItemID == item.id {
+                let editor = makeInlineFavoriteEditorView(for: item)
+                contentStack.addArrangedSubview(editor)
+                editor.widthAnchor.constraint(equalToConstant: rowWidth).isActive = true
+            }
         }
         syncVisibleRowsHoverState()
     }
@@ -587,8 +755,10 @@ class PopoverController: NSViewController {
         parts.append(query.keyword)
         parts.append("\(query.filterType.rawValue)")
         parts.append("\(query.timeFilter.rawValue)")
+        parts.append(query.favoriteFolder ?? "")
+        parts.append(pendingFavoriteItemID ?? "")
         parts.append("\(items.count)")
-        parts.append(items.map { "\($0.id):\($0.isFavorite ? 1 : 0):\($0.textLength)" }.joined(separator: "|"))
+        parts.append(items.map { "\($0.id):\($0.isFavorite ? 1 : 0):\($0.favoriteFolder ?? ""):\($0.textLength)" }.joined(separator: "|"))
         return parts.joined(separator: "#")
     }
 
@@ -662,5 +832,13 @@ class PopoverController: NSViewController {
             "存储占用: \(ClipboardStore.shared.storageUsageDescription())",
             "Storage: \(ClipboardStore.shared.storageUsageDescription())"
         )
+        refreshFavoriteFolderFilterOptions(preserveSelection: true)
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        guard indices.contains(index) else { return nil }
+        return self[index]
     }
 }

@@ -18,8 +18,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let btn = statusItem.button {
-            btn.title = "⌘"
-            btn.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+            btn.title = ""
+            if let appIcon = (NSApp.applicationIconImage?.copy() as? NSImage) ?? NSApp.applicationIconImage {
+                appIcon.size = NSSize(width: 18, height: 18)
+                appIcon.isTemplate = false
+                btn.image = appIcon
+            }
+            btn.imagePosition = .imageOnly
             btn.action = #selector(toggle)
             btn.target = self
         }

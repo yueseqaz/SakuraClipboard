@@ -170,9 +170,9 @@ class HoverPreviewImageView: NSImageView {
 
 // MARK: - Clipboard Row View
 class ClipRowView: NSView {
-    private static let timeFormatter: DateFormatter = {
+    private static let dateTimeFormatter: DateFormatter = {
         let fmt = DateFormatter()
-        fmt.dateFormat = "HH:mm:ss"
+        fmt.dateFormat = "yyyy-MM-dd HH:mm"
         return fmt
     }()
 
@@ -190,7 +190,8 @@ class ClipRowView: NSView {
     private var isExpandedText = false
     private var isHovering = false
     private let collapsedTextLines = 2
-    private let expandedTextLines = 5
+    private let defaultExpandedTextLines = 5
+    private var expandedLineLimit = 5
 
     init(item: ClipboardItem) {
         self.item = item
@@ -242,9 +243,12 @@ class ClipRowView: NSView {
         }
         if item.isFavorite {
             header.addArrangedSubview(BadgeView(I18N.t("收藏", "FAV"), color: DS.favorite))
+            if let folder = item.favoriteFolder, !folder.isEmpty {
+                header.addArrangedSubview(BadgeView(folder, color: DS.accent))
+            }
         }
 
-        let dateLabel = NSTextField(labelWithString: Self.timeFormatter.string(from: item.date))
+        let dateLabel = NSTextField(labelWithString: Self.dateTimeFormatter.string(from: item.date))
         dateLabel.font = DS.fontSmall
         dateLabel.textColor = DS.textSec
         header.addArrangedSubview(dateLabel)
@@ -280,17 +284,18 @@ class ClipRowView: NSView {
             stack.addArrangedSubview(label)
             textLabel = label
 
-            let newlineCount = text.reduce(0) { $1.isNewline ? $0 + 1 : $0 }
+            let explicitLineCount = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).count
             let measuredLength = max(item.textLength, text.count)
-            let isLongText = measuredLength > 60 || item.hasMoreText || newlineCount >= 1
-            if isLongText {
+            let needsExpandControl = item.hasMoreText || explicitLineCount > collapsedTextLines || measuredLength > 120
+            if needsExpandControl {
+                expandedLineLimit = max(collapsedTextLines + 1, min(defaultExpandedTextLines, explicitLineCount))
                 let meta = NSTextField(labelWithString: I18N.t("已自动折叠 · \(measuredLength) 字符", "Collapsed · \(measuredLength) chars"))
                 meta.font = DS.fontSmall
                 meta.textColor = DS.textSec.withAlphaComponent(0.75)
                 stack.addArrangedSubview(meta)
                 textMetaLabel = meta
 
-                let expandBtn = NSButton(title: I18N.t("展开到 5 行", "Expand to 5 lines"), target: self, action: #selector(toggleTextExpand))
+                let expandBtn = NSButton(title: I18N.t("部分展开", "Partially expand"), target: self, action: #selector(toggleTextExpand))
                 expandBtn.bezelStyle = .inline
                 expandBtn.isBordered = false
                 expandBtn.font = DS.fontSmall
@@ -418,14 +423,14 @@ class ClipRowView: NSView {
     private func applyExpandedState(notify: Bool) {
         guard let label = textLabel else { return }
 
-        label.maximumNumberOfLines = isExpandedText ? expandedTextLines : collapsedTextLines
+        label.maximumNumberOfLines = isExpandedText ? expandedLineLimit : collapsedTextLines
         label.cell?.truncatesLastVisibleLine = !isExpandedText
-        expandButton?.title = isExpandedText ? I18N.t("收起", "Collapse") : I18N.t("展开到 5 行", "Expand to 5 lines")
+        expandButton?.title = isExpandedText ? I18N.t("收起", "Collapse") : I18N.t("部分展开", "Partially expand")
 
         if let meta = textMetaLabel {
             let count = max(item.textLength, label.stringValue.count)
             meta.stringValue = isExpandedText
-                ? I18N.t("已展开前 5 行 · \(count) 字符预览", "Showing first 5 lines · \(count) chars preview")
+                ? I18N.t("已部分展开 · \(count) 字符预览", "Partially expanded · \(count) chars preview")
                 : I18N.t("已自动折叠 · \(count) 字符", "Collapsed · \(count) chars")
         }
 

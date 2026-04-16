@@ -21,6 +21,11 @@ class ClipboardStore {
         let keyword: String
         let filterType: FilterType
         let timeFilter: TimeFilter
+        let favoriteFolder: String?
+    }
+
+    enum QueryFolderFilter {
+        static let unfavoritedOnly = "__UNFAVORITED_ONLY__"
     }
 
     static let shared = ClipboardStore()
@@ -95,14 +100,23 @@ class ClipboardStore {
         finalizeChanges()
     }
 
-    func updateFavorite(id: String, isFavorite: Bool) {
+    func updateFavorite(id: String, isFavorite: Bool, folderName: String? = nil) {
         dbLock.lock()
         defer { dbLock.unlock() }
+
+        let cleanedFolder = folderName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let folder = (isFavorite && !(cleanedFolder ?? "").isEmpty) ? cleanedFolder : nil
+
         execute(
-            "UPDATE clipboard_items SET is_favorite = ? WHERE id = ?;",
+            "UPDATE clipboard_items SET is_favorite = ?, favorite_folder = ? WHERE id = ?;",
             bind: { stmt in
                 sqlite3_bind_int(stmt, 1, isFavorite ? 1 : 0)
-                sqlite3_bind_text(stmt, 2, id, -1, SQLITE_TRANSIENT)
+                if let folder {
+                    sqlite3_bind_text(stmt, 2, folder, -1, SQLITE_TRANSIENT)
+                } else {
+                    sqlite3_bind_null(stmt, 2)
+                }
+                sqlite3_bind_text(stmt, 3, id, -1, SQLITE_TRANSIENT)
             }
         )
         loadAll()
@@ -113,7 +127,11 @@ class ClipboardStore {
         dbLock.lock()
         defer { dbLock.unlock() }
         let target = items.first(where: { $0.id == id })
-        updateFavorite(id: id, isFavorite: !(target?.isFavorite ?? false))
+        updateFavorite(
+            id: id,
+            isFavorite: !(target?.isFavorite ?? false),
+            folderName: target?.favoriteFolder
+        )
     }
 
     func clear() {
@@ -143,6 +161,26 @@ class ClipboardStore {
         trim()
         loadAll()
         notifyClipboardUpdated()
+    }
+
+    func allFavoriteFolders() -> [String] {
+        dbLock.lock()
+        defer { dbLock.unlock() }
+        guard let db else { return [] }
+
+        var stmt: OpaquePointer?
+        let sql = "SELECT DISTINCT favorite_folder FROM clipboard_items WHERE is_favorite = 1 AND favorite_folder IS NOT NULL AND length(trim(favorite_folder)) > 0 ORDER BY favorite_folder COLLATE NOCASE ASC;"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            return []
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        var folders: [String] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let cText = sqlite3_column_text(stmt, 0) else { continue }
+            folders.append(String(cString: cText))
+        }
+        return folders
     }
 
     func storageLocationDescription() -> String {
@@ -204,7 +242,7 @@ class ClipboardStore {
         defer { dbLock.unlock() }
         let selectText = "substr(text, 1, \(Self.textPreviewFetchLimit)) AS text"
         var sql = """
-        SELECT id, type, \(selectText), NULL AS image_data, created_at, is_favorite, length(text)
+        SELECT id, type, \(selectText), NULL AS image_data, created_at, is_favorite, length(text), favorite_folder
         FROM clipboard_items
         WHERE 1 = 1
         """
@@ -227,6 +265,15 @@ class ClipboardStore {
             sql += " AND created_at >= ?"
             let ts = threshold.timeIntervalSince1970
             bindings.append { stmt, i in sqlite3_bind_double(stmt, i, ts) }
+        }
+
+        if let folder = query.favoriteFolder {
+            if folder == QueryFolderFilter.unfavoritedOnly {
+                sql += " AND is_favorite = 0"
+            } else {
+                sql += " AND is_favorite = 1 AND favorite_folder = ?"
+                bindings.append { stmt, i in sqlite3_bind_text(stmt, i, folder, -1, SQLITE_TRANSIENT) }
+            }
         }
 
         sql += " ORDER BY is_favorite DESC, created_at DESC;"
@@ -292,13 +339,38 @@ class ClipboardStore {
                 text TEXT,
                 image_data BLOB,
                 created_at REAL NOT NULL,
-                is_favorite INTEGER NOT NULL DEFAULT 0
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                favorite_folder TEXT
             );
             """
         )
+        ensureFavoriteFolderColumn()
         execute("CREATE INDEX IF NOT EXISTS idx_clipboard_created_at ON clipboard_items(created_at DESC);")
         execute("CREATE INDEX IF NOT EXISTS idx_clipboard_type ON clipboard_items(type);")
         execute("CREATE INDEX IF NOT EXISTS idx_clipboard_favorite_created ON clipboard_items(is_favorite DESC, created_at DESC);")
+    }
+
+    private func ensureFavoriteFolderColumn() {
+        guard !columnExists(table: "clipboard_items", column: "favorite_folder") else { return }
+        execute("ALTER TABLE clipboard_items ADD COLUMN favorite_folder TEXT;")
+    }
+
+    private func columnExists(table: String, column: String) -> Bool {
+        guard let db else { return false }
+        var stmt: OpaquePointer?
+        let sql = "PRAGMA table_info(\(table));"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            return false
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let cName = sqlite3_column_text(stmt, 1) else { continue }
+            if String(cString: cName) == column {
+                return true
+            }
+        }
+        return false
     }
 
     private func execute(_ sql: String, bind: ((OpaquePointer?) -> Void)? = nil) {
@@ -322,8 +394,8 @@ class ClipboardStore {
     private func insert(_ item: ClipboardItem) {
         execute(
             """
-            INSERT INTO clipboard_items (id, type, text, image_data, created_at, is_favorite)
-            VALUES (?, ?, ?, ?, ?, ?);
+            INSERT INTO clipboard_items (id, type, text, image_data, created_at, is_favorite, favorite_folder)
+            VALUES (?, ?, ?, ?, ?, ?, ?);
             """,
             bind: { stmt in
                 sqlite3_bind_text(stmt, 1, item.id, -1, SQLITE_TRANSIENT)
@@ -342,6 +414,11 @@ class ClipboardStore {
                 }
                 sqlite3_bind_double(stmt, 5, item.date.timeIntervalSince1970)
                 sqlite3_bind_int(stmt, 6, item.isFavorite ? 1 : 0)
+                if let folder = item.favoriteFolder {
+                    sqlite3_bind_text(stmt, 7, folder, -1, SQLITE_TRANSIENT)
+                } else {
+                    sqlite3_bind_null(stmt, 7)
+                }
             }
         )
     }
@@ -385,7 +462,7 @@ class ClipboardStore {
         let selectText = "substr(text, 1, \(Self.textPreviewFetchLimit)) AS text"
         items = fetch(
             sql: """
-            SELECT id, type, \(selectText), NULL AS image_data, created_at, is_favorite, length(text)
+            SELECT id, type, \(selectText), NULL AS image_data, created_at, is_favorite, length(text), favorite_folder
             FROM clipboard_items
             ORDER BY is_favorite DESC, created_at DESC;
             """
@@ -421,6 +498,7 @@ class ClipboardStore {
             let createdAt = sqlite3_column_double(stmt, 4)
             let isFavorite = sqlite3_column_int(stmt, 5) == 1
             let textLength = Int(sqlite3_column_int(stmt, 6))
+            let favoriteFolder = sqlite3_column_text(stmt, 7).map { String(cString: $0) }
 
             if typeRaw == ClipboardItem.Kind.text.rawValue, let text {
                 result.append(
@@ -429,15 +507,31 @@ class ClipboardStore {
                         text: text,
                         date: Date(timeIntervalSince1970: createdAt),
                         isFavorite: isFavorite,
+                        favoriteFolder: favoriteFolder,
                         textLength: textLength,
                         hasMoreText: textLength > text.count
                     )
                 )
             } else if typeRaw == ClipboardItem.Kind.image.rawValue {
                 if let imageData {
-                    result.append(ClipboardItem(id: id, imageData: imageData, date: Date(timeIntervalSince1970: createdAt), isFavorite: isFavorite))
+                    result.append(
+                        ClipboardItem(
+                            id: id,
+                            imageData: imageData,
+                            date: Date(timeIntervalSince1970: createdAt),
+                            isFavorite: isFavorite,
+                            favoriteFolder: favoriteFolder
+                        )
+                    )
                 } else {
-                    result.append(ClipboardItem(id: id, imageDate: Date(timeIntervalSince1970: createdAt), isFavorite: isFavorite))
+                    result.append(
+                        ClipboardItem(
+                            id: id,
+                            imageDate: Date(timeIntervalSince1970: createdAt),
+                            isFavorite: isFavorite,
+                            favoriteFolder: favoriteFolder
+                        )
+                    )
                 }
             }
         }

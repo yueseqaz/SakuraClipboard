@@ -48,6 +48,7 @@ class ClipboardMonitor {
 
         let imageData = pb.data(forType: .png) ?? pb.data(forType: .tiff)
         let text = pb.string(forType: .string)
+
         ingestQueue.async {
             if let imageData {
                 ClipboardStore.shared.addImageData(imageData)

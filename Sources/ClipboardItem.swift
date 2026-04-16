@@ -16,6 +16,7 @@ class ClipboardItem {
     let imageData: Data?
     let date: Date
     let isFavorite: Bool
+    let favoriteFolder: String?
     let textLength: Int
     let hasMoreText: Bool
     private var cachedImage: NSImage?
@@ -25,6 +26,7 @@ class ClipboardItem {
         text: String,
         date: Date = Date(),
         isFavorite: Bool = false,
+        favoriteFolder: String? = nil,
         textLength: Int? = nil,
         hasMoreText: Bool? = nil
     ) {
@@ -34,36 +36,51 @@ class ClipboardItem {
         self.imageData = nil
         self.date = date
         self.isFavorite = isFavorite
+        self.favoriteFolder = favoriteFolder?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let length = textLength ?? text.count
         self.textLength = length
         self.hasMoreText = hasMoreText ?? (length > text.count)
     }
 
-    init(id: String = UUID().uuidString, imageData: Data, date: Date = Date(), isFavorite: Bool = false) {
+    init(
+        id: String = UUID().uuidString,
+        imageData: Data,
+        date: Date = Date(),
+        isFavorite: Bool = false,
+        favoriteFolder: String? = nil
+    ) {
         self.id = id
         self.kind = .image
         self.text = nil
         self.imageData = imageData
         self.date = date
         self.isFavorite = isFavorite
+        self.favoriteFolder = favoriteFolder?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.textLength = 0
         self.hasMoreText = false
     }
 
-    init(id: String, imageDate: Date, isFavorite: Bool) {
+    init(id: String, imageDate: Date, isFavorite: Bool, favoriteFolder: String? = nil) {
         self.id = id
         self.kind = .image
         self.text = nil
         self.imageData = nil
         self.date = imageDate
         self.isFavorite = isFavorite
+        self.favoriteFolder = favoriteFolder?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.textLength = 0
         self.hasMoreText = false
     }
 
-    convenience init?(id: String = UUID().uuidString, image: NSImage, date: Date = Date(), isFavorite: Bool = false) {
+    convenience init?(
+        id: String = UUID().uuidString,
+        image: NSImage,
+        date: Date = Date(),
+        isFavorite: Bool = false,
+        favoriteFolder: String? = nil
+    ) {
         guard let data = Self.makeImageData(from: image) else { return nil }
-        self.init(id: id, imageData: data, date: date, isFavorite: isFavorite)
+        self.init(id: id, imageData: data, date: date, isFavorite: isFavorite, favoriteFolder: favoriteFolder)
     }
 
     var image: NSImage? {
@@ -81,5 +98,11 @@ class ClipboardItem {
             return nil
         }
         return png
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }
