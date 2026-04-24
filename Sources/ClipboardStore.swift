@@ -23,6 +23,8 @@ class ClipboardStore {
     private let minMaxItems = 10
     private let hardMaxItems = 5000
     private let maxItemsKey = "clipboard.maxItems"
+    private let retentionDaysKey = "clipboard.retentionDays"
+    static let retentionDayOptions: [Int?] = [1, 3, 5, 7, 15, 30, nil]
     private let fileManager = FileManager.default
     private let dbLock = NSRecursiveLock()
     private var db: OpaquePointer?
@@ -51,9 +53,16 @@ class ClipboardStore {
         return max(minMaxItems, min(raw, hardMaxItems))
     }
 
+    var retentionDays: Int? {
+        let raw = UserDefaults.standard.integer(forKey: retentionDaysKey)
+        if raw <= 0 { return nil }
+        return Self.retentionDayOptions.contains(raw) ? raw : nil
+    }
+
     private init() {
         openDatabase()
         createTablesIfNeeded()
+        applyRetentionPolicyLocked()
         loadAll()
     }
 
@@ -136,6 +145,21 @@ class ClipboardStore {
         let clamped = max(minMaxItems, min(newValue, hardMaxItems))
         UserDefaults.standard.set(clamped, forKey: maxItemsKey)
         trim()
+        applyRetentionPolicyLocked()
+        loadAll()
+        notifyClipboardUpdated()
+    }
+
+    func setRetentionDays(_ days: Int?) {
+        dbLock.lock()
+        defer { dbLock.unlock() }
+        if let days, Self.retentionDayOptions.contains(days) {
+            UserDefaults.standard.set(days, forKey: retentionDaysKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: retentionDaysKey)
+        }
+        applyRetentionPolicyLocked()
+        trim()
         loadAll()
         notifyClipboardUpdated()
     }
@@ -217,12 +241,48 @@ class ClipboardStore {
     func filteredItems(query: Query) -> [ClipboardItem] {
         dbLock.lock()
         defer { dbLock.unlock() }
+        let built = buildQuerySQL(query: query)
+        return fetch(sql: built.sql + " ORDER BY created_at DESC;", binders: built.binders)
+    }
+
+    func filteredItems(query: Query, limit: Int, offset: Int) -> [ClipboardItem] {
+        dbLock.lock()
+        defer { dbLock.unlock() }
+        let safeLimit = max(1, limit)
+        let safeOffset = max(0, offset)
+        var built = buildQuerySQL(query: query)
+        built.sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?;"
+        built.binders.append { stmt, i in sqlite3_bind_int(stmt, i, Int32(safeLimit)) }
+        built.binders.append { stmt, i in sqlite3_bind_int(stmt, i, Int32(safeOffset)) }
+        return fetch(sql: built.sql, binders: built.binders)
+    }
+
+    func filteredCount(query: Query) -> Int {
+        dbLock.lock()
+        defer { dbLock.unlock() }
+        guard let db else { return 0 }
+        let built = buildQuerySQL(query: query, selectClause: "SELECT COUNT(1)")
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, built.sql + ";", -1, &stmt, nil) == SQLITE_OK else {
+            return 0
+        }
+        defer { sqlite3_finalize(stmt) }
+        for (idx, binder) in built.binders.enumerated() {
+            binder(stmt, Int32(idx + 1))
+        }
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return 0 }
+        return Int(sqlite3_column_int(stmt, 0))
+    }
+
+    private func buildQuerySQL(
+        query: Query,
+        selectClause: String? = nil
+    ) -> (sql: String, binders: [(OpaquePointer?, Int32) -> Void]) {
         let selectText = "substr(text, 1, \(Self.textPreviewFetchLimit)) AS text"
-        var sql = """
+        var sql = selectClause ?? """
         SELECT id, type, \(selectText), NULL AS image_data, created_at, is_favorite, length(text), favorite_folder
-        FROM clipboard_items
-        WHERE 1 = 1
         """
+        sql += " FROM clipboard_items WHERE 1 = 1"
         var bindings: [(OpaquePointer?, Int32) -> Void] = []
 
         let keyword = query.keyword.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -245,16 +305,29 @@ class ClipboardStore {
                 bindings.append { stmt, i in sqlite3_bind_text(stmt, i, folder, -1, SQLITE_TRANSIENT) }
             }
         }
-
-        sql += " ORDER BY created_at DESC;"
-
-        return fetch(sql: sql, binders: bindings)
+        return (sql, bindings)
     }
 
     private func finalizeChanges() {
+        applyRetentionPolicyLocked()
         trim()
         loadAll()
         notifyClipboardUpdated()
+    }
+
+    private func applyRetentionPolicyLocked() {
+        guard let days = retentionDays else { return }
+        let cutoff = Date().addingTimeInterval(-Double(days) * 86_400).timeIntervalSince1970
+        execute(
+            """
+            DELETE FROM clipboard_items
+            WHERE is_favorite = 0
+              AND created_at < ?;
+            """,
+            bind: { stmt in
+                sqlite3_bind_double(stmt, 1, cutoff)
+            }
+        )
     }
 
     private func openDatabase() {

@@ -5,7 +5,7 @@ import ServiceManagement
 class PopoverController: NSViewController, NSTextFieldDelegate {
     private let popoverWidth: CGFloat = 338
     private let rowWidth: CGFloat = 314
-    private let footerHeight: CGFloat = 92
+    private let footerHeight: CGFloat = 122
     private let scrollView = NSScrollView()
     private let contentStack = NSStackView()
     private var copiedToast: NSView?
@@ -14,12 +14,16 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
     private let maxItemsStepper = NSStepper()
     private let storageUsageLabel = NSTextField(labelWithString: "")
     private let searchField = NSSearchField()
-    private let typeFilter = NSPopUpButton()
+    private let typeTabs = NSSegmentedControl()
     private let favoriteFolderFilter = NSPopUpButton()
+    private let retentionPolicyFilter = NSPopUpButton()
     private let languageFilter = NSPopUpButton()
     private weak var expandedRow: ClipRowView?
     private var searchDebounceWorkItem: DispatchWorkItem?
+    private var visibleSyncWorkItem: DispatchWorkItem?
     private var lastRenderSignature = ""
+    private var hasPendingReload = true
+    private var isPopoverVisible = false
     private var favoriteFolderValues: [String?] = [nil]
     private var pendingFavoriteItemID: String?
     private var pendingFavoriteDraftFolder: String = ""
@@ -35,7 +39,7 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         buildUI()
 
         NotificationCenter.default.addObserver(
-            self, selector: #selector(reload),
+            self, selector: #selector(handleClipboardUpdated),
             name: .clipboardUpdated, object: nil
         )
         NotificationCenter.default.addObserver(
@@ -45,7 +49,9 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         )
         scrollView.contentView.postsBoundsChangedNotifications = true
 
-        DispatchQueue.main.async { self.reload() }
+        DispatchQueue.main.async {
+            self.refreshMetaLabels(refreshFolders: true)
+        }
     }
 
     deinit {
@@ -61,6 +67,7 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         // Divider
         let divider = NSBox()
         divider.boxType = .separator
+        divider.borderColor = DS.border.withAlphaComponent(0.55)
         divider.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(divider)
 
@@ -78,8 +85,8 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         scrollView.documentView = docView
 
         contentStack.orientation = .vertical
-        contentStack.spacing = 8
-        contentStack.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 12, right: 12)
+        contentStack.spacing = 10
+        contentStack.edgeInsets = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         docView.addSubview(contentStack)
 
@@ -101,7 +108,7 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
             header.topAnchor.constraint(equalTo: view.topAnchor),
             header.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             header.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            header.heightAnchor.constraint(equalToConstant: 132),
+            header.heightAnchor.constraint(equalToConstant: 140),
 
             divider.topAnchor.constraint(equalTo: header.bottomAnchor),
             divider.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
@@ -122,13 +129,14 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
     private func buildHeader() -> NSView {
         let v = NSView()
         v.wantsLayer = true
+        v.layer?.backgroundColor = DS.headerBg.cgColor
 
         let icon = NSTextField(labelWithString: "⌘")
-        icon.font = NSFont.systemFont(ofSize: 16, weight: .bold)
+        icon.font = NSFont.systemFont(ofSize: 17, weight: .bold)
         icon.textColor = DS.accent
 
         let title = NSTextField(labelWithString: I18N.t("剪贴板历史", "Clipboard History"))
-        title.font = DS.fontTitle
+        title.font = DS.fontTitleStrong
         title.textColor = DS.textPrimary
 
         historySubtitleLabel.font = DS.fontSmall
@@ -151,22 +159,29 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
 
         searchField.placeholderString = I18N.t("按关键字搜索文本", "Search text by keyword")
         searchField.controlSize = .large
+        searchField.maximumRecents = 0
+        searchField.recentsAutosaveName = nil
         searchField.target = self
         searchField.action = #selector(searchTextChanged)
         searchField.sendsSearchStringImmediately = true
 
-        let previousTypeIndex = max(typeFilter.indexOfSelectedItem, 0)
-        typeFilter.removeAllItems()
-        typeFilter.addItems(withTitles: [
+        let tabTitles = [
             I18N.t("全部", "All"),
             I18N.t("文本", "Text"),
             I18N.t("图片", "Image"),
             I18N.t("收藏", "Favorites")
-        ])
-        typeFilter.selectItem(at: min(previousTypeIndex, typeFilter.numberOfItems - 1))
-        typeFilter.controlSize = .large
-        typeFilter.target = self
-        typeFilter.action = #selector(filtersChanged)
+        ]
+        let previousTypeIndex = max(typeTabs.selectedSegment, 0)
+        typeTabs.segmentCount = tabTitles.count
+        for (idx, title) in tabTitles.enumerated() {
+            typeTabs.setLabel(title, forSegment: idx)
+            typeTabs.setWidth(42, forSegment: idx)
+        }
+        typeTabs.selectedSegment = min(previousTypeIndex, tabTitles.count - 1)
+        typeTabs.segmentStyle = .rounded
+        typeTabs.controlSize = .small
+        typeTabs.target = self
+        typeTabs.action = #selector(filtersChanged)
 
         refreshFavoriteFolderFilterOptions(preserveSelection: true)
         favoriteFolderFilter.controlSize = .large
@@ -179,7 +194,7 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         topRow.spacing = 8
         topRow.alignment = .centerY
 
-        let filterRow = NSStackView(views: [typeFilter, favoriteFolderFilter])
+        let filterRow = NSStackView(views: [typeTabs, favoriteFolderFilter])
         filterRow.orientation = .horizontal
         filterRow.spacing = 8
         filterRow.alignment = .centerY
@@ -193,10 +208,10 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 12),
             stack.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: -12),
-            stack.topAnchor.constraint(equalTo: v.topAnchor, constant: 8),
-            stack.bottomAnchor.constraint(equalTo: v.bottomAnchor, constant: -8),
-            typeFilter.widthAnchor.constraint(equalToConstant: 88),
-            favoriteFolderFilter.widthAnchor.constraint(equalToConstant: 170)
+            stack.topAnchor.constraint(equalTo: v.topAnchor, constant: 10),
+            stack.bottomAnchor.constraint(equalTo: v.bottomAnchor, constant: -10),
+            typeTabs.widthAnchor.constraint(equalToConstant: 168),
+            favoriteFolderFilter.widthAnchor.constraint(equalToConstant: 138)
         ])
 
         return v
@@ -205,7 +220,7 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
     private func buildFooter() -> NSView {
         let v = NSView()
         v.wantsLayer = true
-        v.layer?.backgroundColor = DS.surface.cgColor
+        v.layer?.backgroundColor = DS.footerBg.cgColor
 
         // Launch at login toggle
         let loginLabel = NSTextField(labelWithString: I18N.t("开机自启", "Launch at Login"))
@@ -243,6 +258,17 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         limitGroup.spacing = 6
         limitGroup.alignment = .centerY
 
+        let retentionLabel = NSTextField(labelWithString: I18N.t("自动清理", "Auto clean"))
+        retentionLabel.font = DS.fontSmall
+        retentionLabel.textColor = DS.textSec
+
+        configureRetentionPolicyFilter()
+
+        let retentionGroup = NSStackView(views: [retentionLabel, retentionPolicyFilter])
+        retentionGroup.orientation = .horizontal
+        retentionGroup.spacing = 6
+        retentionGroup.alignment = .centerY
+
         // Buttons
         let quitBtn = makeTextButton(I18N.t("退出", "Quit"), color: DS.textSec)
         quitBtn.target = self
@@ -258,9 +284,15 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         languageFilter.target = self
         languageFilter.action = #selector(languageChanged)
 
-        let row1 = NSStackView(views: [toggleGroup, languageFilter, limitGroup])
+        languageFilter.widthAnchor.constraint(equalToConstant: 86).isActive = true
+
+        let spacer1 = NSView()
+        let spacer2 = NSView()
+        let spacer3 = NSView()
+
+        let row1 = NSStackView(views: [toggleGroup, spacer1, languageFilter, limitGroup])
         row1.orientation = .horizontal
-        row1.spacing = 10
+        row1.spacing = 8
         row1.alignment = .centerY
 
         storageUsageLabel.font = DS.fontSmall
@@ -270,14 +302,19 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         openFinderBtn.target = self
         openFinderBtn.action = #selector(openStorageInFinder)
 
-        let row2 = NSStackView(views: [storageUsageLabel, openFinderBtn, aboutBtn, quitBtn])
+        let row2 = NSStackView(views: [retentionGroup, spacer2, storageUsageLabel])
         row2.orientation = .horizontal
-        row2.spacing = 10
+        row2.spacing = 8
         row2.alignment = .centerY
 
-        let stack = NSStackView(views: [row1, row2])
+        let row3 = NSStackView(views: [spacer3, openFinderBtn, aboutBtn, quitBtn])
+        row3.orientation = .horizontal
+        row3.spacing = 12
+        row3.alignment = .centerY
+
+        let stack = NSStackView(views: [row1, row2, row3])
         stack.orientation = .vertical
-        stack.spacing = 4
+        stack.spacing = 5
         stack.translatesAutoresizingMaskIntoConstraints = false
         v.addSubview(stack)
 
@@ -287,7 +324,7 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
             stack.centerYAnchor.constraint(equalTo: v.centerYAnchor)
         ])
 
-        refreshMetaLabels()
+        refreshMetaLabels(refreshFolders: true)
 
         return v
     }
@@ -296,9 +333,28 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         let btn = NSButton(title: title, target: nil, action: nil)
         btn.bezelStyle = .inline
         btn.isBordered = false
-        btn.font = DS.fontSmall
+        btn.font = DS.fontLabel
         btn.contentTintColor = color
+        btn.setButtonType(.momentaryChange)
         return btn
+    }
+
+    private func configureRetentionPolicyFilter() {
+        retentionPolicyFilter.removeAllItems()
+        retentionPolicyFilter.addItems(withTitles: [
+            I18N.t("1天", "1 day"),
+            I18N.t("3天", "3 days"),
+            I18N.t("5天", "5 days"),
+            I18N.t("7天", "7 days"),
+            I18N.t("15天", "15 days"),
+            I18N.t("30天", "30 days"),
+            I18N.t("永久", "Forever")
+        ])
+        retentionPolicyFilter.target = self
+        retentionPolicyFilter.action = #selector(retentionPolicyChanged)
+        if !retentionPolicyFilter.constraints.contains(where: { $0.firstAttribute == .width }) {
+            retentionPolicyFilter.widthAnchor.constraint(equalToConstant: 86).isActive = true
+        }
     }
 
     // MARK: - Login Item
@@ -340,7 +396,7 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
             )
         ) else { return }
         ClipboardStore.shared.clear()
-        refreshMetaLabels()
+        refreshMetaLabels(refreshFolders: true)
     }
 
     @objc private func openStorageInFinder() {
@@ -356,6 +412,7 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         lastRenderSignature = ""
         view.subviews.forEach { $0.removeFromSuperview() }
         buildUI()
+        refreshMetaLabels(refreshFolders: true)
         reload()
     }
 
@@ -428,11 +485,28 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
 
     @objc private func historyLimitChanged(_ sender: NSStepper) {
         ClipboardStore.shared.setMaxItems(Int(sender.intValue))
-        refreshMetaLabels()
+        refreshMetaLabels(refreshFolders: false)
+    }
+
+    @objc private func retentionPolicyChanged() {
+        let mappedDays: [Int?] = [1, 3, 5, 7, 15, 30, nil]
+        let idx = max(0, min(retentionPolicyFilter.indexOfSelectedItem, mappedDays.count - 1))
+        ClipboardStore.shared.setRetentionDays(mappedDays[idx])
+        refreshMetaLabels(refreshFolders: false)
+        reload()
     }
 
     @objc private func filtersChanged() {
+        updateFavoriteFolderFilterState()
         reload()
+    }
+
+    @objc private func handleClipboardUpdated() {
+        if isPopoverVisible {
+            reload()
+        } else {
+            hasPendingReload = true
+        }
     }
 
     @objc private func searchTextChanged() {
@@ -447,6 +521,7 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
     private func handleFavoriteToggle(for item: ClipboardItem) {
         if item.isFavorite {
             ClipboardStore.shared.updateFavorite(id: item.id, isFavorite: false)
+            refreshFavoriteFolderFilterOptions(preserveSelection: true)
             if pendingFavoriteItemID == item.id {
                 cancelInlineFavoriteEditing()
             }
@@ -554,6 +629,7 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         guard let id = pendingFavoriteItemID else { return }
         let cleaned = favoriteInlineInput.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         ClipboardStore.shared.updateFavorite(id: id, isFavorite: true, folderName: cleaned.isEmpty ? nil : cleaned)
+        refreshFavoriteFolderFilterOptions(preserveSelection: true)
         cancelInlineFavoriteEditing()
     }
 
@@ -594,15 +670,15 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
     }
 
     private func updateFavoriteFolderFilterState() {
-        let isFavoriteMode = typeFilter.indexOfSelectedItem == 3
+        let isFavoriteMode = typeTabs.selectedSegment == 3
         favoriteFolderFilter.isEnabled = isFavoriteMode
         favoriteFolderFilter.alphaValue = isFavoriteMode ? 1 : 0.55
     }
 
     private func currentQuery() -> ClipboardStore.Query {
         let type: ClipboardStore.FilterType
-        let favoritesOnly = typeFilter.indexOfSelectedItem == 3
-        switch typeFilter.indexOfSelectedItem {
+        let favoritesOnly = typeTabs.selectedSegment == 3
+        switch typeTabs.selectedSegment {
         case 1: type = .text
         case 2: type = .image
         default: type = .all
@@ -633,7 +709,12 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
     // MARK: - Reload
 
     @objc func reload() {
-        refreshMetaLabels()
+        guard isPopoverVisible else {
+            hasPendingReload = true
+            return
+        }
+        hasPendingReload = false
+        refreshMetaLabels(refreshFolders: false)
         let query = currentQuery()
         let items = ClipboardStore.shared.filteredItems(query: query)
         let signature = renderSignature(query: query, items: items)
@@ -702,7 +783,9 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
             }
             contentStack.addArrangedSubview(row)
             row.widthAnchor.constraint(equalToConstant: rowWidth).isActive = true
-            row.hydrateDeferredContent()
+            if item.kind == .image {
+                row.hydrateDeferredContent()
+            }
 
             if pendingFavoriteItemID == item.id {
                 let editor = makeInlineFavoriteEditorView(for: item)
@@ -710,16 +793,66 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
                 editor.widthAnchor.constraint(equalToConstant: rowWidth).isActive = true
             }
         }
-        syncVisibleRowsHoverState()
+        scheduleVisibleRowsMaintenance(immediate: true)
     }
 
     @objc private func scrollBoundsChanged() {
-        syncVisibleRowsHoverState()
+        scheduleVisibleRowsMaintenance(immediate: false)
     }
 
     private func syncVisibleRowsHoverState() {
-        for case let row as ClipRowView in contentStack.arrangedSubviews {
+        for row in visibleRows() {
             row.syncHoverStateWithMouseLocation()
+        }
+    }
+
+    private func hydrateVisibleRowsDeferredContent() {
+        let rows = visibleRows().filter { $0.needsDeferredImageHydration }
+        for row in rows.prefix(2) {
+            row.hydrateDeferredContent()
+        }
+        if rows.count > 2 {
+            scheduleVisibleRowsMaintenance(immediate: false)
+        }
+    }
+
+    private func visibleRows() -> [ClipRowView] {
+        guard let docView = scrollView.documentView else { return [] }
+        view.layoutSubtreeIfNeeded()
+        let visibleRect = docView.convert(scrollView.contentView.bounds, from: scrollView.contentView)
+            .insetBy(dx: 0, dy: -80)
+        let rows = contentStack.arrangedSubviews.compactMap { $0 as? ClipRowView }.filter {
+            $0.frame.intersects(visibleRect)
+        }
+        if !rows.isEmpty { return rows }
+        return Array(contentStack.arrangedSubviews.compactMap { $0 as? ClipRowView }.prefix(10))
+    }
+
+    private func scheduleVisibleRowsMaintenance(immediate: Bool) {
+        visibleSyncWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.hydrateVisibleRowsDeferredContent()
+            self?.syncVisibleRowsHoverState()
+        }
+        visibleSyncWorkItem = work
+        if immediate {
+            DispatchQueue.main.async(execute: work)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.04, execute: work)
+        }
+    }
+
+    func popoverVisibilityChanged(isVisible: Bool) {
+        isPopoverVisible = isVisible
+        if isVisible {
+            refreshMetaLabels(refreshFolders: true)
+            if hasPendingReload {
+                reload()
+            } else {
+                scheduleVisibleRowsMaintenance(immediate: true)
+            }
+        } else {
+            visibleSyncWorkItem?.cancel()
         }
     }
 
@@ -731,7 +864,9 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         parts.append(query.favoriteFolder ?? "")
         parts.append(pendingFavoriteItemID ?? "")
         parts.append("\(items.count)")
-        parts.append(items.map { "\($0.id):\($0.isFavorite ? 1 : 0):\($0.favoriteFolder ?? ""):\($0.textLength)" }.joined(separator: "|"))
+        let sampled = items.prefix(40).map { "\($0.id):\($0.isFavorite ? 1 : 0):\($0.favoriteFolder ?? ""):\($0.textLength)" }
+        parts.append(sampled.joined(separator: "|"))
+        parts.append(items.last?.id ?? "")
         return parts.joined(separator: "#")
     }
 
@@ -796,16 +931,21 @@ class PopoverController: NSViewController, NSTextFieldDelegate {
         copiedToast = toast
     }
 
-    private func refreshMetaLabels() {
+    private func refreshMetaLabels(refreshFolders: Bool) {
         let maxItems = ClipboardStore.shared.maxItems
         historySubtitleLabel.stringValue = I18N.t("最近 \(maxItems) 条记录", "Latest \(maxItems) records")
         maxItemsValueLabel.stringValue = "\(maxItems)"
         maxItemsStepper.integerValue = maxItems
+        let retentionDays = ClipboardStore.shared.retentionDays
+        let mappedDays: [Int?] = [1, 3, 5, 7, 15, 30, nil]
+        retentionPolicyFilter.selectItem(at: mappedDays.firstIndex(where: { $0 == retentionDays }) ?? (mappedDays.count - 1))
         storageUsageLabel.stringValue = I18N.t(
             "存储占用: \(ClipboardStore.shared.storageUsageDescription())",
             "Storage: \(ClipboardStore.shared.storageUsageDescription())"
         )
-        refreshFavoriteFolderFilterOptions(preserveSelection: true)
+        if refreshFolders {
+            refreshFavoriteFolderFilterOptions(preserveSelection: true)
+        }
     }
 }
 

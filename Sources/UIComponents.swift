@@ -2,24 +2,27 @@ import Cocoa
 
 // MARK: - Design Tokens
 struct DS {
-    static let accent      = NSColor(red: 0.16, green: 0.49, blue: 0.95, alpha: 1)
-    static let accentSoft  = NSColor(red: 0.16, green: 0.49, blue: 0.95, alpha: 0.14)
-    static let bg          = NSColor(red: 0.97, green: 0.98, blue: 1.00, alpha: 1)
+    static let accent      = NSColor(red: 0.11, green: 0.44, blue: 0.94, alpha: 1)
+    static let accentSoft  = NSColor(red: 0.11, green: 0.44, blue: 0.94, alpha: 0.14)
+    static let bg          = NSColor(red: 0.95, green: 0.96, blue: 0.98, alpha: 1)
+    static let headerBg    = NSColor(red: 0.94, green: 0.95, blue: 0.98, alpha: 1)
+    static let footerBg    = NSColor(red: 0.97, green: 0.97, blue: 0.98, alpha: 1)
     static let surface     = NSColor.white
-    static let surfaceHov  = NSColor(red: 0.94, green: 0.97, blue: 1.00, alpha: 1)
-    static let border      = NSColor(red: 0.84, green: 0.88, blue: 0.95, alpha: 1)
-    static let textPrimary = NSColor(red: 0.14, green: 0.16, blue: 0.21, alpha: 1)
-    static let textSec     = NSColor(red: 0.42, green: 0.47, blue: 0.55, alpha: 1)
-    static let danger      = NSColor(red: 0.88, green: 0.29, blue: 0.25, alpha: 1)
-    static let success     = NSColor(red: 0.18, green: 0.64, blue: 0.38, alpha: 1)
-    static let favorite    = NSColor(red: 0.94, green: 0.66, blue: 0.16, alpha: 1)
+    static let surfaceHov  = NSColor(red: 0.96, green: 0.98, blue: 1.00, alpha: 1)
+    static let border      = NSColor(red: 0.81, green: 0.86, blue: 0.94, alpha: 1)
+    static let textPrimary = NSColor(red: 0.12, green: 0.14, blue: 0.19, alpha: 1)
+    static let textSec     = NSColor(red: 0.40, green: 0.45, blue: 0.53, alpha: 1)
+    static let danger      = NSColor(red: 0.86, green: 0.25, blue: 0.22, alpha: 1)
+    static let success     = NSColor(red: 0.16, green: 0.62, blue: 0.36, alpha: 1)
+    static let favorite    = NSColor(red: 0.90, green: 0.62, blue: 0.15, alpha: 1)
 
-    static let radius: CGFloat = 10
+    static let radius: CGFloat = 12
     static let radiusSm: CGFloat = 6
-    static let fontMono  = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-    static let fontLabel = NSFont.systemFont(ofSize: 13, weight: .regular)
+    static let fontMono  = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)
+    static let fontLabel = NSFont.systemFont(ofSize: 12.5, weight: .regular)
     static let fontSmall = NSFont.systemFont(ofSize: 11, weight: .medium)
-    static let fontTitle = NSFont.systemFont(ofSize: 13, weight: .semibold)
+    static let fontTitle = NSFont.systemFont(ofSize: 15, weight: .semibold)
+    static let fontTitleStrong = NSFont.systemFont(ofSize: 18, weight: .bold)
 }
 
 // MARK: - Pill Badge
@@ -189,6 +192,7 @@ class ClipRowView: NSView {
     private var imageView: HoverPreviewImageView?
     private var isExpandedText = false
     private var isHovering = false
+    private var isHydratingDeferredImage = false
     private let collapsedTextLines = 2
     private let defaultExpandedTextLines = 5
     private var expandedLineLimit = 5
@@ -208,6 +212,10 @@ class ClipRowView: NSView {
         bgLayer.backgroundColor = DS.surface.cgColor
         bgLayer.borderWidth = 1
         bgLayer.borderColor = DS.border.cgColor
+        bgLayer.shadowColor = NSColor.black.withAlphaComponent(0.12).cgColor
+        bgLayer.shadowOffset = CGSize(width: 0, height: -1)
+        bgLayer.shadowRadius = 7
+        bgLayer.shadowOpacity = 0.08
         layer?.addSublayer(bgLayer)
     }
 
@@ -220,8 +228,8 @@ class ClipRowView: NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 4
-        stack.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
+        stack.spacing = 6
+        stack.edgeInsets = NSEdgeInsets(top: 11, left: 12, bottom: 11, right: 12)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
 
@@ -257,7 +265,7 @@ class ClipRowView: NSView {
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         header.addArrangedSubview(spacer)
 
-        let copyHint = NSTextField(labelWithString: I18N.t("⌘ 点击复制", "⌘ Click to Copy"))
+        let copyHint = NSTextField(labelWithString: I18N.t("⌘ 复制", "⌘ Copy"))
         copyHint.font = DS.fontSmall
         copyHint.textColor = DS.textSec.withAlphaComponent(0.5)
         header.addArrangedSubview(copyHint)
@@ -329,9 +337,23 @@ class ClipRowView: NSView {
     }
 
     func hydrateDeferredContent() {
-        if item.kind == .image, imageView?.image == nil, let img = onRequestImage?(item) {
-            imageView?.image = img
+        guard item.kind == .image, imageView?.image == nil, !isHydratingDeferredImage else { return }
+        isHydratingDeferredImage = true
+        let currentID = item.id
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let image = self.onRequestImage?(self.item)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.isHydratingDeferredImage = false
+                guard self.item.id == currentID else { return }
+                self.imageView?.image = image
+            }
         }
+    }
+
+    var needsDeferredImageHydration: Bool {
+        item.kind == .image && imageView?.image == nil && !isHydratingDeferredImage
     }
 
     override func updateTrackingAreas() {
@@ -369,7 +391,8 @@ class ClipRowView: NSView {
         CATransaction.begin()
         CATransaction.disableActions()
         bgLayer.backgroundColor = isHovering ? DS.surfaceHov.cgColor : DS.surface.cgColor
-        bgLayer.borderColor = isHovering ? DS.accent.withAlphaComponent(0.3).cgColor : DS.border.cgColor
+        bgLayer.borderColor = isHovering ? DS.accent.withAlphaComponent(0.26).cgColor : DS.border.cgColor
+        bgLayer.shadowOpacity = isHovering ? 0.15 : 0.08
         CATransaction.commit()
     }
 
