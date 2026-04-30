@@ -1,4 +1,5 @@
 import Cocoa
+import CryptoKit
 import SQLite3
 
 // MARK: - Store
@@ -91,7 +92,7 @@ class ClipboardStore {
     }
 
     private func addImageDataLocked(_ imageData: Data) {
-        removeExistingImageData(imageData)
+        removeExistingImage(imageData)
         let item = ClipboardItem(imageData: imageData)
         insert(item)
         finalizeChanges()
@@ -364,6 +365,7 @@ class ClipboardStore {
                 type INTEGER NOT NULL,
                 text TEXT,
                 image_data BLOB,
+                data_hash TEXT,
                 created_at REAL NOT NULL,
                 is_favorite INTEGER NOT NULL DEFAULT 0,
                 favorite_folder TEXT
@@ -371,14 +373,21 @@ class ClipboardStore {
             """
         )
         ensureFavoriteFolderColumn()
+        ensureDataHashColumn()
         execute("CREATE INDEX IF NOT EXISTS idx_clipboard_created_at ON clipboard_items(created_at DESC);")
         execute("CREATE INDEX IF NOT EXISTS idx_clipboard_type ON clipboard_items(type);")
         execute("CREATE INDEX IF NOT EXISTS idx_clipboard_favorite_created ON clipboard_items(is_favorite DESC, created_at DESC);")
+        execute("CREATE INDEX IF NOT EXISTS idx_clipboard_type_hash ON clipboard_items(type, data_hash);")
     }
 
     private func ensureFavoriteFolderColumn() {
         guard !columnExists(table: "clipboard_items", column: "favorite_folder") else { return }
         execute("ALTER TABLE clipboard_items ADD COLUMN favorite_folder TEXT;")
+    }
+
+    private func ensureDataHashColumn() {
+        guard !columnExists(table: "clipboard_items", column: "data_hash") else { return }
+        execute("ALTER TABLE clipboard_items ADD COLUMN data_hash TEXT;")
     }
 
     private func columnExists(table: String, column: String) -> Bool {
@@ -420,8 +429,8 @@ class ClipboardStore {
     private func insert(_ item: ClipboardItem) {
         execute(
             """
-            INSERT INTO clipboard_items (id, type, text, image_data, created_at, is_favorite, favorite_folder)
-            VALUES (?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO clipboard_items (id, type, text, image_data, data_hash, created_at, is_favorite, favorite_folder)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             """,
             bind: { stmt in
                 sqlite3_bind_text(stmt, 1, item.id, -1, SQLITE_TRANSIENT)
@@ -438,12 +447,17 @@ class ClipboardStore {
                 } else {
                     sqlite3_bind_null(stmt, 4)
                 }
-                sqlite3_bind_double(stmt, 5, item.date.timeIntervalSince1970)
-                sqlite3_bind_int(stmt, 6, item.isFavorite ? 1 : 0)
-                if let folder = item.favoriteFolder {
-                    sqlite3_bind_text(stmt, 7, folder, -1, SQLITE_TRANSIENT)
+                if let imageData = item.imageData {
+                    sqlite3_bind_text(stmt, 5, self.imageHash(imageData), -1, SQLITE_TRANSIENT)
                 } else {
-                    sqlite3_bind_null(stmt, 7)
+                    sqlite3_bind_null(stmt, 5)
+                }
+                sqlite3_bind_double(stmt, 6, item.date.timeIntervalSince1970)
+                sqlite3_bind_int(stmt, 7, item.isFavorite ? 1 : 0)
+                if let folder = item.favoriteFolder {
+                    sqlite3_bind_text(stmt, 8, folder, -1, SQLITE_TRANSIENT)
+                } else {
+                    sqlite3_bind_null(stmt, 8)
                 }
             }
         )
@@ -456,15 +470,26 @@ class ClipboardStore {
         )
     }
 
-    private func removeExistingImageData(_ imageData: Data) {
+    private func removeExistingImage(_ imageData: Data) {
+        let hash = imageHash(imageData)
         execute(
-            "DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items WHERE type = 1 AND image_data = ? LIMIT 1);",
+            "DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items WHERE type = 1 AND data_hash = ? LIMIT 1);",
+            bind: { stmt in
+                sqlite3_bind_text(stmt, 1, hash, -1, SQLITE_TRANSIENT)
+            }
+        )
+        execute(
+            "DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items WHERE type = 1 AND data_hash IS NULL AND image_data = ? LIMIT 1);",
             bind: { stmt in
                 imageData.withUnsafeBytes { ptr in
                     _ = sqlite3_bind_blob(stmt, 1, ptr.baseAddress, Int32(imageData.count), SQLITE_TRANSIENT)
                 }
             }
         )
+    }
+
+    private func imageHash(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     private func trim() {

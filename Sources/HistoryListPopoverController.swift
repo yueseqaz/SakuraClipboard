@@ -28,19 +28,36 @@ private final class HoverHistoryTableView: NSTableView {
 }
 
 private final class HoverHistoryRowView: NSTableRowView {
+    private let selectionEffectView = NSVisualEffectView()
+
     var isHovering = false {
-        didSet { needsDisplay = true }
+        didSet { selectionEffectView.isHidden = !isHovering }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setupSelectionEffect()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupSelectionEffect()
+    }
+
+    private func setupSelectionEffect() {
+        selectionEffectView.material = .selection
+        selectionEffectView.blendingMode = .withinWindow
+        selectionEffectView.state = .active
+        selectionEffectView.isHidden = true
+        addSubview(selectionEffectView, positioned: .below, relativeTo: nil)
+    }
+
+    override func layout() {
+        super.layout()
+        selectionEffectView.frame = bounds
     }
 
     override func drawSelection(in dirtyRect: NSRect) {}
-
-    override func drawBackground(in dirtyRect: NSRect) {
-        super.drawBackground(in: dirtyRect)
-        if isHovering {
-            NSColor.systemBlue.withAlphaComponent(0.24).setFill()
-            bounds.fill()
-        }
-    }
 }
 
 final class HistoryListPopoverController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
@@ -49,7 +66,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         case favorites
     }
 
-    private let pageSize = 20
+    private let pageSize = 15
     private var mode: Mode = .all
     private var items: [ClipboardItem] = []
     private var offset = 0
@@ -68,6 +85,9 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     private var previewPanel: NSPanel?
     private var previewImageView: NSImageView?
     private let thumbnailCache = NSCache<NSString, NSImage>()
+    private let previewImageCache = NSCache<NSString, NSImage>()
+    private let previewLoadQueue = DispatchQueue(label: "com.sakura.clipboard.history.preview", qos: .userInitiated)
+    private var pendingPreviewItemID: String?
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 420))
@@ -112,8 +132,6 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     }
 
     private func buildUI() {
-        view.appearance = NSAppearance(named: .darkAqua)
-
         effectView.translatesAutoresizingMaskIntoConstraints = false
         effectView.material = .menu
         effectView.blendingMode = .withinWindow
@@ -122,11 +140,11 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
         titleLabel.stringValue = I18N.t("历史记录", "History")
         titleLabel.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
-        titleLabel.textColor = NSColor.white.withAlphaComponent(0.95)
+        titleLabel.textColor = .labelColor
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
         topDivider.boxType = .separator
-        topDivider.borderColor = NSColor.white.withAlphaComponent(0.12)
+        topDivider.borderColor = .separatorColor
         topDivider.translatesAutoresizingMaskIntoConstraints = false
 
         scrollView.drawsBackground = false
@@ -269,7 +287,6 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             let label = NSTextField(labelWithString: "")
             label.identifier = NSUserInterfaceItemIdentifier("label")
             label.font = NSFont.systemFont(ofSize: 14, weight: .medium)
-            label.textColor = NSColor.white.withAlphaComponent(0.96)
             label.lineBreakMode = .byTruncatingTail
             label.translatesAutoresizingMaskIntoConstraints = false
 
@@ -290,6 +307,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
         let icon = cell.subviews.first(where: { $0.identifier?.rawValue == "icon" }) as? NSImageView
         let label = cell.subviews.first(where: { $0.identifier?.rawValue == "label" }) as? NSTextField
+        label?.textColor = row == hoveredRow ? .selectedMenuItemTextColor : .labelColor
 
         if let text = item.text, !text.isEmpty {
             label?.stringValue = short(text)
@@ -351,9 +369,11 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         hoveredRow = row
         if let previous {
             (tableView.rowView(atRow: previous, makeIfNecessary: false) as? HoverHistoryRowView)?.isHovering = false
+            setRowTextColor(previous, isHovering: false)
         }
         if let row {
             (tableView.rowView(atRow: row, makeIfNecessary: false) as? HoverHistoryRowView)?.isHovering = true
+            setRowTextColor(row, isHovering: true)
         }
 
         guard let row, row >= 0, row < items.count else {
@@ -361,11 +381,38 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             return
         }
         let item = items[row]
-        guard item.kind == .image, let image = ClipboardStore.shared.image(for: item.id) else {
+        guard item.kind == .image else {
             hidePreview()
             return
         }
-        showPreview(image)
+        showPreview(for: item)
+    }
+
+    private func setRowTextColor(_ row: Int, isHovering: Bool) {
+        guard row >= 0,
+              let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView,
+              let label = cell.subviews.first(where: { $0.identifier?.rawValue == "label" }) as? NSTextField else { return }
+        label.textColor = isHovering ? .selectedMenuItemTextColor : .labelColor
+    }
+
+    private func showPreview(for item: ClipboardItem) {
+        let key = item.id as NSString
+        if let cached = previewImageCache.object(forKey: key) {
+            showPreview(cached)
+            return
+        }
+
+        hidePreview()
+        pendingPreviewItemID = item.id
+        previewLoadQueue.async { [weak self] in
+            guard let self else { return }
+            guard let image = ClipboardStore.shared.image(for: item.id) else { return }
+            self.previewImageCache.setObject(image, forKey: key)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.pendingPreviewItemID == item.id else { return }
+                self.showPreview(image)
+            }
+        }
     }
 
     private func closeContainingMenu() {
@@ -423,6 +470,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     }
 
     private func hidePreview() {
+        pendingPreviewItemID = nil
         previewPanel?.orderOut(nil)
     }
 

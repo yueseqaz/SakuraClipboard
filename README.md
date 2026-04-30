@@ -1,18 +1,18 @@
 # SakuraClipboard
 
-SakuraClipboard is a lightweight macOS clipboard history app focused on fast access, clean organization, and dependable local storage for both text and images.
+SakuraClipboard is a lightweight macOS menu bar clipboard history app. It keeps recent text and image clips locally, opens from the system menu bar, and avoids a separate main window.
 
 ## Features
 
 - Automatic clipboard history for text and images
-- Keyword search for text content
-- Filters by type, time range, and favorite state/folder
-- Favorite any item and organize favorites into folders inline
-- Image preview and expand/collapse support for long text entries
-- SQLite-based persistence for larger history and fast lookup
-- Adjustable history limit with storage usage visibility
-- Open storage location in Finder for quick inspection
-- Safe clear actions that keep favorites intact
+- Native menu bar interface with no main panel
+- Current clipboard summary in the menu
+- Fixed-height History menu with scrolling and incremental loading
+- Click any history item to copy it back to the clipboard
+- Image preview on hover in the History menu
+- Automatic cleanup by age
+- Adjustable history limit: 100, 200, 350, 500, 1000, 2000, or 5000 items
+- SQLite-based local storage
 - Chinese/English interface switching
 - Launch at login support
 
@@ -35,17 +35,18 @@ The DMG includes:
 ## Usage Notes
 
 - Access the app from the macOS menu bar.
-- Click an item to copy it back to the clipboard.
-- Use the star action to add an item to favorites, then assign or change its folder directly in the list.
-- Use the favorites filter to view all items, only unfavorited items, or a specific favorite folder.
+- Open History to browse recent clipboard items.
+- Scroll inside History to load more items.
+- Hover over an image item to preview it.
+- Choose Auto Clean to set retention time.
+- Choose History Limit to set the maximum number of saved items.
 
 ## Project Structure
 
 - `Sources/ClipboardItem.swift` - item model
-- `Sources/ClipboardStore.swift` - SQLite persistence, favorite folders, and querying
-- `Sources/ClipboardMonitor.swift` - adaptive clipboard polling
-- `Sources/UIComponents.swift` - reusable UI components
-- `Sources/PopoverController.swift` - main popover UI, filters, and inline favorite interactions
+- `Sources/ClipboardStore.swift` - SQLite persistence and history querying
+- `Sources/ClipboardMonitor.swift` - clipboard monitoring
+- `Sources/HistoryListPopoverController.swift` - embedded menu history list
 - `Sources/AppDelegate.swift` - app lifecycle and status bar behavior
 - `Sources/main.swift` - app entry point
 

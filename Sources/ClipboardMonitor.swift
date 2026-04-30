@@ -46,10 +46,12 @@ class ClipboardMonitor {
             }
         }
 
-        let imageData = pb.data(forType: .png) ?? pb.data(forType: .tiff)
-        let text = pb.string(forType: .string)
-
+        let observedChangeCount = changeCount
         ingestQueue.async {
+            let pasteboard = NSPasteboard.general
+            guard pasteboard.changeCount == observedChangeCount else { return }
+            let imageData = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff)
+            let text = pasteboard.string(forType: .string)
             if let imageData {
                 ClipboardStore.shared.addImageData(imageData)
             } else if let text {
