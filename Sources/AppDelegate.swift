@@ -1,11 +1,6 @@
 import Cocoa
 import ServiceManagement
 
-// MARK: - FlippedView (scroll content starts from top)
-class FlippedView: NSView {
-    override var isFlipped: Bool { true }
-}
-
 // MARK: - App Delegate
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var statusItem: NSStatusItem!

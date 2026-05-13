@@ -28,6 +28,8 @@ class ClipboardStore {
     static let retentionDayOptions: [Int?] = [1, 3, 5, 7, 15, 30, nil]
     private let fileManager = FileManager.default
     private let dbLock = NSRecursiveLock()
+    private let maxTextBytes = 100_000       // ~100 KB
+    private let maxImageBytes = 10_000_000   // ~10 MB
     private var db: OpaquePointer?
 
     private func notifyClipboardUpdated() {
@@ -72,8 +74,9 @@ class ClipboardStore {
         defer { dbLock.unlock() }
         let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return }
-        removeExistingText(cleaned)
-        let item = ClipboardItem(text: cleaned)
+        let capped = String(cleaned.prefix(maxTextBytes))
+        removeExistingText(capped)
+        let item = ClipboardItem(text: capped)
         insert(item)
         finalizeChanges()
     }
@@ -92,6 +95,7 @@ class ClipboardStore {
     }
 
     private func addImageDataLocked(_ imageData: Data) {
+        guard imageData.count <= maxImageBytes else { return }
         removeExistingImage(imageData)
         let item = ClipboardItem(imageData: imageData)
         insert(item)
@@ -419,7 +423,18 @@ class ClipboardStore {
             return
         }
         bind?(stmt)
-        if sqlite3_step(stmt) != SQLITE_DONE {
+
+        var rc = sqlite3_step(stmt)
+        var retries = 0
+        while rc == SQLITE_BUSY, retries < 3 {
+            usleep(10_000) // 10ms
+            sqlite3_reset(stmt)
+            bind?(stmt)
+            rc = sqlite3_step(stmt)
+            retries += 1
+        }
+
+        if rc != SQLITE_DONE {
             if let msg = sqlite3_errmsg(db) {
                 print("SQLite step failed: \(String(cString: msg))")
             }
