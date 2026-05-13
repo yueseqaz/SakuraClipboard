@@ -67,6 +67,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         historyLimitRoot.submenu = makeHistoryLimitMenu()
         menu.addItem(historyLimitRoot)
 
+        let ignoreRoot = NSMenuItem(title: I18N.t("忽略应用", "Ignore Apps"), action: nil, keyEquivalent: "")
+        ignoreRoot.submenu = makeIgnoreAppsMenu()
+        menu.addItem(ignoreRoot)
+
         let languageRoot = NSMenuItem(title: I18N.t("语言", "Language"), action: nil, keyEquivalent: "")
         languageRoot.submenu = makeLanguageMenu()
         menu.addItem(languageRoot)
@@ -132,6 +136,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func makeRetentionMenu() -> NSMenu {
         let menu = NSMenu()
+
+        let storageItem = NSMenuItem(
+            title: I18N.t("占用：", "Storage: ") + ClipboardStore.shared.storageUsageDescription(),
+            action: #selector(revealStorageInFinder),
+            keyEquivalent: ""
+        )
+        storageItem.target = self
+        storageItem.toolTip = ClipboardStore.shared.storageLocationDescription()
+        menu.addItem(storageItem)
+        menu.addItem(.separator())
+
         let options: [(String, Int?)] = [
             (I18N.t("1天", "1 day"), 1),
             (I18N.t("3天", "3 days"), 3),
@@ -148,7 +163,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             it.state = ClipboardStore.shared.retentionDays == days ? .on : .off
             menu.addItem(it)
         }
+
+        menu.addItem(.separator())
+        let clearItem = NSMenuItem(
+            title: I18N.t("清除所有记录", "Clear All"),
+            action: #selector(clearAll),
+            keyEquivalent: ""
+        )
+        clearItem.target = self
+        menu.addItem(clearItem)
+
         return menu
+    }
+
+    @objc private func revealStorageInFinder() {
+        ClipboardStore.shared.revealInFinder()
     }
 
     @objc private func setRetentionFromMenu(_ sender: NSMenuItem) {
@@ -194,6 +223,89 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         I18N.current = .en
     }
 
+    // MARK: - Ignore Apps
+
+    private static let ignoredAppsKey = "clipboard.ignoredApps"
+    private var ignoredAppNames: [String: String] = [:]
+
+    static func ignoredAppBundleIDs() -> Set<String> {
+        guard let arr = UserDefaults.standard.stringArray(forKey: ignoredAppsKey) else { return [] }
+        return Set(arr)
+    }
+
+    static func setAppIgnored(_ bundleID: String, ignored: Bool) {
+        var ids = ignoredAppBundleIDs()
+        if ignored {
+            ids.insert(bundleID)
+        } else {
+            ids.remove(bundleID)
+        }
+        UserDefaults.standard.set(Array(ids), forKey: ignoredAppsKey)
+    }
+
+    private func makeIgnoreAppsMenu() -> NSMenu {
+        let menu = NSMenu()
+        let ignored = Self.ignoredAppBundleIDs()
+
+        if ignored.isEmpty {
+            let empty = NSMenuItem(title: I18N.t("未忽略任何应用", "No apps ignored"), action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+        } else {
+            for bid in ignored.sorted() {
+                let name = ignoredAppName(for: bid)
+                let it = NSMenuItem(title: name, action: #selector(removeIgnoredApp(_:)), keyEquivalent: "")
+                it.target = self
+                it.representedObject = bid
+                it.state = .on
+                menu.addItem(it)
+            }
+        }
+
+        menu.addItem(.separator())
+        let addItem = NSMenuItem(title: I18N.t("添加应用…", "Add Application…"), action: #selector(addIgnoredApp), keyEquivalent: "")
+        addItem.target = self
+        menu.addItem(addItem)
+
+        return menu
+    }
+
+    private func ignoredAppName(for bundleID: String) -> String {
+        if let cached = ignoredAppNames[bundleID] { return cached }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return bundleID }
+        let infoURL = url.appendingPathComponent("Contents/Info.plist")
+        guard let plist = NSDictionary(contentsOf: infoURL) else { return bundleID }
+        let name = (plist["CFBundleDisplayName"] as? String)
+            ?? (plist["CFBundleName"] as? String)
+            ?? url.deletingPathExtension().lastPathComponent
+        ignoredAppNames[bundleID] = name
+        return name
+    }
+
+    @objc private func addIgnoredApp() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.allowsMultipleSelection = true
+        panel.message = I18N.t("选择要忽略剪贴板监听的应用", "Select apps to ignore clipboard monitoring")
+        panel.prompt = I18N.t("添加", "Add")
+
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            guard let plist = NSDictionary(contentsOf: url.appendingPathComponent("Contents/Info.plist")),
+                  let bid = plist["CFBundleIdentifier"] as? String else { continue }
+            let name = (plist["CFBundleDisplayName"] as? String)
+                ?? (plist["CFBundleName"] as? String)
+                ?? url.deletingPathExtension().lastPathComponent
+            ignoredAppNames[bid] = name
+            Self.setAppIgnored(bid, ignored: true)
+        }
+    }
+
+    @objc private func removeIgnoredApp(_ sender: NSMenuItem) {
+        guard let bid = sender.representedObject as? String else { return }
+        Self.setAppIgnored(bid, ignored: false)
+    }
+
     private func isLoginItemEnabled() -> Bool {
         if #available(macOS 13.0, *) {
             return SMAppService.mainApp.status == .enabled
@@ -221,6 +333,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func showAbout() {
         NSApp.orderFrontStandardAboutPanel(nil)
+    }
+
+    @objc private func clearAll() {
+        ClipboardStore.shared.clear()
     }
 
     @objc private func quitFromMenu() {

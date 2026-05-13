@@ -47,6 +47,13 @@ class ClipboardMonitor {
         }
 
         let observedChangeCount = changeCount
+
+        let frontBundleID: String? = {
+            guard let front = NSWorkspace.shared.frontmostApplication else { return nil }
+            return front.bundleIdentifier
+        }()
+        if let bid = frontBundleID, AppDelegate.ignoredAppBundleIDs().contains(bid) { return }
+
         ingestQueue.async {
             let pasteboard = NSPasteboard.general
             guard pasteboard.changeCount == observedChangeCount else { return }

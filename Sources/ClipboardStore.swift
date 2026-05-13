@@ -135,7 +135,7 @@ class ClipboardStore {
     func clear() {
         dbLock.lock()
         defer { dbLock.unlock() }
-        execute("DELETE FROM clipboard_items WHERE is_favorite = 0;")
+        execute("DELETE FROM clipboard_items;")
         loadAll()
         notifyClipboardUpdated()
     }
@@ -344,6 +344,7 @@ class ClipboardStore {
             print("Open sqlite failed")
             db = nil
         }
+        execute("PRAGMA journal_mode=WAL;")
     }
 
     private func closeDatabase() {
