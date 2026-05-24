@@ -278,6 +278,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             let label = NSTextField(labelWithString: "")
             label.tag = 101
             label.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+            label.maximumNumberOfLines = 1
             label.lineBreakMode = .byTruncatingTail
             label.translatesAutoresizingMaskIntoConstraints = false
             cell.addSubview(label)
