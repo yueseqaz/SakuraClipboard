@@ -281,9 +281,13 @@ final class SearchPanel {
     private init() {}
 
     func show() {
-        if let panel, panel.isVisible {
-            panel.makeKeyAndOrderFront(nil)
-            return
+        print("SearchPanel.show() called")
+        
+        // Close existing panel if any
+        if let panel {
+            panel.close()
+            self.panel = nil
+            self.controller = nil
         }
 
         let width: CGFloat = 420
@@ -293,6 +297,8 @@ final class SearchPanel {
         let x = screenFrame.midX - width / 2
         let y = screenFrame.midY - height / 2
 
+        print("Creating panel at \(x), \(y)")
+        
         let newPanel = NSPanel(
             contentRect: NSRect(x: x, y: y, width: width, height: height),
             styleMask: [.titled, .closable, .utilityWindow],
@@ -305,16 +311,20 @@ final class SearchPanel {
         newPanel.level = .floating
         newPanel.isReleasedWhenClosed = false
         newPanel.collectionBehavior = [.canJoinAllSpaces, .transient]
-        newPanel.titlebarAppearsTransparent = true
-        newPanel.backgroundColor = .clear
+        newPanel.backgroundColor = .windowBackgroundColor
 
         let searchController = SearchPanelController()
         newPanel.contentViewController = searchController
         newPanel.delegate = searchController
+        
+        print("Showing panel...")
+        NSApp.activate(ignoringOtherApps: true)
         newPanel.makeKeyAndOrderFront(nil)
-
+        
         self.panel = newPanel
         self.controller = searchController
+        
+        print("Panel shown, isVisible: \(newPanel.isVisible)")
     }
 
     func hide() {

@@ -41,6 +41,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func openSearch() {
+        print("openSearch called")
         SearchPanel.shared.show()
     }
 
