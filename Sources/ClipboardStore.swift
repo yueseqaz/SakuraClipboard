@@ -144,6 +144,19 @@ class ClipboardStore {
         notifyClipboardUpdated()
     }
 
+    func deleteItem(id: String) {
+        dbLock.lock()
+        defer { dbLock.unlock() }
+        execute(
+            "DELETE FROM clipboard_items WHERE id = ?;",
+            bind: { stmt in
+                sqlite3_bind_text(stmt, 1, id, -1, SQLITE_TRANSIENT)
+            }
+        )
+        loadAll()
+        notifyClipboardUpdated()
+    }
+
     func setMaxItems(_ newValue: Int) {
         dbLock.lock()
         defer { dbLock.unlock() }

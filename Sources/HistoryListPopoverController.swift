@@ -60,7 +60,7 @@ private final class HoverHistoryRowView: NSTableRowView {
     override func drawSelection(in dirtyRect: NSRect) {}
 }
 
-final class HistoryListPopoverController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
+final class HistoryListPopoverController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
     enum Mode {
         case all
         case favorites
@@ -175,6 +175,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         tableView.onHoverRow = { [weak self] row in
             self?.handleHover(row)
         }
+        tableView.menu = createContextMenu()
 
         let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("main"))
         col.width = 320
@@ -386,6 +387,13 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         let row = tableView.clickedRow >= 0 ? tableView.clickedRow : tableView.selectedRow
         guard row >= 0, row < items.count else { return }
         let item = items[row]
+        copyItem(item)
+        tableView.deselectRow(row)
+        hidePreview()
+        closeContainingMenu()
+    }
+
+    private func copyItem(_ item: ClipboardItem) {
         let pb = NSPasteboard.general
         pb.clearContents()
         if item.kind == .text {
@@ -395,9 +403,61 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         } else if let image = ClipboardStore.shared.image(for: item.id) {
             pb.writeObjects([image])
         }
-        tableView.deselectRow(row)
-        hidePreview()
-        closeContainingMenu()
+    }
+
+    private func createContextMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.delegate = self
+        return menu
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        let row = tableView.clickedRow
+        guard row >= 0, row < items.count else {
+            menu.removeAllItems()
+            return
+        }
+
+        let item = items[row]
+        menu.removeAllItems()
+
+        let copyItem = NSMenuItem(title: I18N.t("复制", "Copy"), action: #selector(contextCopy(_:)), keyEquivalent: "")
+        copyItem.target = self
+        copyItem.representedObject = item.id
+        menu.addItem(copyItem)
+
+        menu.addItem(.separator())
+
+        let favTitle = item.isFavorite ? I18N.t("取消收藏", "Unfavorite") : I18N.t("收藏", "Favorite")
+        let favItem = NSMenuItem(title: favTitle, action: #selector(contextToggleFavorite(_:)), keyEquivalent: "")
+        favItem.target = self
+        favItem.representedObject = item.id
+        menu.addItem(favItem)
+
+        menu.addItem(.separator())
+
+        let deleteItem = NSMenuItem(title: I18N.t("删除", "Delete"), action: #selector(contextDelete(_:)), keyEquivalent: "")
+        deleteItem.target = self
+        deleteItem.representedObject = item.id
+        menu.addItem(deleteItem)
+    }
+
+    @objc private func contextCopy(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        guard let item = items.first(where: { $0.id == id }) else { return }
+        copyItem(item)
+    }
+
+    @objc private func contextToggleFavorite(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        ClipboardStore.shared.toggleFavorite(id: id)
+        resetAndLoad()
+    }
+
+    @objc private func contextDelete(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        ClipboardStore.shared.deleteItem(id: id)
+        resetAndLoad()
     }
 
     private func handleHover(_ row: Int?) {
