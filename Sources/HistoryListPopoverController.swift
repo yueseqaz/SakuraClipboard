@@ -445,11 +445,13 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             return
         }
         let item = items[row]
-        guard item.kind == .image else {
+        if item.kind == .image {
+            showPreview(for: item)
+        } else if item.kind == .text, let text = item.text, text.count > 42 {
+            showTextPreview(text)
+        } else {
             hidePreview()
-            return
         }
-        showPreview(for: item)
     }
 
     private func setRowTextColor(_ row: Int, isHovering: Bool) {
@@ -531,6 +533,59 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
         previewPanel?.setFrameOrigin(NSPoint(x: x, y: y))
         previewPanel?.orderFrontRegardless()
+    }
+
+    private func showTextPreview(_ text: String) {
+        hidePreview()
+
+        let maxWidth: CGFloat = 360
+        let maxHeight: CGFloat = 280
+
+        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: maxWidth, height: maxHeight))
+        scrollView.hasVerticalScroller = true
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = .windowBackgroundColor
+
+        let textView = NSTextView()
+        textView.string = text
+        textView.font = NSFont.systemFont(ofSize: 13)
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.backgroundColor = .clear
+        textView.textContainerInset = NSSize(width: 12, height: 12)
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = true
+
+        scrollView.documentView = textView
+
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: maxWidth, height: maxHeight),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = true
+        panel.backgroundColor = NSColor.windowBackgroundColor
+        panel.hasShadow = true
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)
+        panel.collectionBehavior = NSWindow.CollectionBehavior([.canJoinAllSpaces, .transient])
+        panel.contentView = scrollView
+
+        let mouse = NSEvent.mouseLocation
+        var px = mouse.x + 24
+        var py = max(16, mouse.y - maxHeight * 0.5)
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) {
+            if px + maxWidth > screen.visibleFrame.maxX - 8 {
+                px = mouse.x - maxWidth - 16
+            }
+            if py + maxHeight > screen.visibleFrame.maxY - 8 {
+                py = screen.visibleFrame.maxY - maxHeight - 8
+            }
+        }
+
+        panel.setFrameOrigin(NSPoint(x: px, y: py))
+        panel.orderFrontRegardless()
+        previewPanel = panel
     }
 
     private func hidePreview() {
