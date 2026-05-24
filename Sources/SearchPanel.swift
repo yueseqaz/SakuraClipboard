@@ -22,6 +22,14 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
         buildUI()
     }
 
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 { // ESC
+            view.window?.close()
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
     private func buildUI() {
         effectView.translatesAutoresizingMaskIntoConstraints = false
         effectView.material = .hudWindow

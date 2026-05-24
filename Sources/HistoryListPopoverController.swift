@@ -87,6 +87,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     private let tableView = HoverHistoryTableView()
     private let scrollView = NSScrollView()
     private let effectView = NSVisualEffectView()
+    private let headerLabel = NSTextField(labelWithString: "")
 
     private var previewPanel: NSPanel?
     private var previewImageView: NSImageView?
@@ -137,6 +138,12 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         effectView.state = .active
         view.addSubview(effectView)
 
+        headerLabel.stringValue = I18N.t("剪贴板历史", "Clipboard History")
+        headerLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        headerLabel.textColor = .secondaryLabelColor
+        headerLabel.translatesAutoresizingMaskIntoConstraints = false
+        effectView.addSubview(headerLabel)
+
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
         scrollView.scrollerStyle = .overlay
@@ -180,7 +187,10 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             effectView.topAnchor.constraint(equalTo: view.topAnchor),
             effectView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            scrollView.topAnchor.constraint(equalTo: effectView.topAnchor, constant: 8),
+            headerLabel.topAnchor.constraint(equalTo: effectView.topAnchor, constant: 8),
+            headerLabel.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 10),
+
+            scrollView.topAnchor.constraint(equalTo: headerLabel.bottomAnchor, constant: 6),
             scrollView.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 8),
             scrollView.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -8),
             scrollView.bottomAnchor.constraint(equalTo: effectView.bottomAnchor, constant: -8)
