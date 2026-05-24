@@ -116,7 +116,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let controller = HistoryListPopoverController()
         controller.loadViewIfNeeded()
         controller.switchMode(mode)
-        controller.setMenuEmbeddedStyle(width: 336, height: 404)
+        controller.setMenuEmbeddedStyle(width: 350, height: 404)
         inlineHistoryControllers.append(controller)
 
         let contentItem = NSMenuItem()
