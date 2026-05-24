@@ -66,9 +66,22 @@ SWIFT
   iconutil -c icns "$ICONSET_DIR" -o "$ICON_ICNS"
 }
 
-echo "🔨 编译..."
+echo "🔨 编译 ARM64..."
 mkdir -p "$BUILD_DIR"
-swiftc -O -framework Cocoa -framework ServiceManagement -framework Carbon -lsqlite3 Sources/*.swift -o "$BUILD_DIR/$APP_NAME"
+swiftc -O -framework Cocoa -framework ServiceManagement -framework Carbon -lsqlite3 \
+  -target arm64-apple-macos11.0 \
+  Sources/*.swift -o "$BUILD_DIR/${APP_NAME}-arm64"
+
+echo "🔨 编译 x86_64..."
+swiftc -O -framework Cocoa -framework ServiceManagement -framework Carbon -lsqlite3 \
+  -target x86_64-apple-macos11.0 \
+  Sources/*.swift -o "$BUILD_DIR/${APP_NAME}-x86_64"
+
+echo "🔗 合并 Universal Binary..."
+lipo -create -output "$BUILD_DIR/$APP_NAME" \
+  "$BUILD_DIR/${APP_NAME}-arm64" \
+  "$BUILD_DIR/${APP_NAME}-x86_64"
+rm -f "$BUILD_DIR/${APP_NAME}-arm64" "$BUILD_DIR/${APP_NAME}-x86_64"
 
 echo "📦 打包..."
 rm -rf "$APP_BUNDLE"

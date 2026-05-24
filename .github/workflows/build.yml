@@ -9,29 +9,14 @@ on:
 jobs:
   build:
     runs-on: macos-14
-    name: Build Universal Binary
+    name: Build
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       
-      - name: Build Universal Binary
-        run: |
-          chmod +x build.sh
-          # Build for ARM
-          swiftc -O -framework Cocoa -framework ServiceManagement -framework Carbon -lsqlite3 \
-            -target arm64-apple-macos11.0 \
-            Sources/*.swift -o build/SakuraClipboard-arm64
-          # Build for Intel
-          swiftc -O -framework Cocoa -framework ServiceManagement -framework Carbon -lsqlite3 \
-            -target x86_64-apple-macos11.0 \
-            Sources/*.swift -o build/SakuraClipboard-x86_64
-          # Create universal binary
-          lipo -create -output build/SakuraClipboard \
-            build/SakuraClipboard-arm64 \
-            build/SakuraClipboard-x86_64
-          # Package
-          ./build.sh
+      - name: Build
+        run: chmod +x build.sh && ./build.sh
       
       - name: Upload DMG
         uses: actions/upload-artifact@v4
