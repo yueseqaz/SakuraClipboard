@@ -1,6 +1,6 @@
 import Cocoa
 
-final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
+final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
     private let pageSize = 50
     private var items: [ClipboardItem] = []
     private var offset = 0
@@ -44,6 +44,7 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
         searchField.font = NSFont.systemFont(ofSize: 15)
         searchField.bezelStyle = .roundedBezel
         searchField.translatesAutoresizingMaskIntoConstraints = false
+        searchField.delegate = self
         searchField.target = self
         searchField.action = #selector(searchChanged)
         effectView.addSubview(searchField)
@@ -64,7 +65,7 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
         tableView.action = #selector(copySelected)
 
         let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("main"))
-        col.width = 380
+        col.width = 360
         tableView.addTableColumn(col)
 
         scrollView.documentView = tableView
@@ -89,6 +90,14 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
     }
 
     @objc private func searchChanged() {
+        performSearch()
+    }
+
+    func controlTextDidChange(_ obj: Notification) {
+        performSearch()
+    }
+
+    private func performSearch() {
         let keyword = searchField.stringValue
         items.removeAll()
         offset = 0
