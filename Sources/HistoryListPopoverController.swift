@@ -31,8 +31,9 @@ private final class HoverHistoryTableView: NSTableView {
         let row = self.row(at: point)
         if row >= 0 {
             selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            return self.menu
         }
-        return super.menu(for: event)
+        return nil
     }
 }
 
@@ -111,6 +112,12 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         )
     }
 
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        // Prevent search field from auto-focusing
+        view.window?.makeFirstResponder(tableView)
+    }
+
     override func viewDidDisappear() {
         super.viewDidDisappear()
         destroyPreviewPanel()
@@ -143,7 +150,8 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         searchField.translatesAutoresizingMaskIntoConstraints = false
         searchField.target = self
         searchField.action = #selector(searchChanged)
-        searchField.sendsSearchStringImmediately = true
+        searchField.sendsSearchStringImmediately = false
+        searchField.sendsWholeSearchString = true
         effectView.addSubview(searchField)
 
         scrollView.drawsBackground = false
