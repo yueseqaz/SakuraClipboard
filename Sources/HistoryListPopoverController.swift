@@ -25,15 +25,6 @@ private final class HoverHistoryTableView: NSTableView {
         onHoverRow?(nil)
         super.mouseExited(with: event)
     }
-
-    override func menu(for event: NSEvent) -> NSMenu? {
-        let point = convert(event.locationInWindow, from: nil)
-        let row = self.row(at: point)
-        if row >= 0 {
-            selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-        }
-        return super.menu(for: event)
-    }
 }
 
 private final class HoverHistoryRowView: NSTableRowView {
