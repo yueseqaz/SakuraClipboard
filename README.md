@@ -1,54 +1,66 @@
 # SakuraClipboard
 
-SakuraClipboard is a lightweight macOS menu bar clipboard history app. It keeps recent text and image clips locally, opens from the system menu bar, and avoids a separate main window.
+A lightweight macOS menu bar clipboard history app. Keep your text and image clips accessible from the system menu bar.
+
+[![Build](https://github.com/YOUR_USERNAME/SakuraClipboard/actions/workflows/build.yml/badge.svg)](https://github.com/YOUR_USERNAME/SakuraClipboard/actions/workflows/build.yml)
 
 ## Features
 
-- Automatic clipboard history for text and images
-- Native menu bar interface with no main panel
-- Current clipboard summary in the menu
-- Fixed-height History menu with scrolling and incremental loading
-- Click any history item to copy it back to the clipboard
-- Image preview on hover in the History menu
-- Automatic cleanup by age
-- Adjustable history limit: 100, 200, 350, 500, 1000, 2000, or 5000 items
-- SQLite-based local storage
-- Chinese/English interface switching
-- Launch at login support
+- **Clipboard History** — Automatically saves text and image clips
+- **Quick Access** — Opens from menu bar or `Cmd+Shift+C`
+- **Search** — `Cmd+Shift+F` opens search panel with Chinese input support
+- **Preview** — Click "预览" button to view full text, hover images to preview
+- **Favorites** — Right-click to favorite items
+- **Auto Cleanup** — Configurable retention (1-30 days or forever)
+- **History Limit** — 100 to 5000 items
+- **Ignore Apps** — Exclude specific apps from monitoring
+- **Launch at Login** — Optional auto-start
+- **Chinese/English UI** — Language switching
 
-## Build
+## Download
+
+Download the latest DMG from [Releases](https://github.com/YOUR_USERNAME/SakuraClipboard/releases):
+
+- `SakuraClipboard-arm64.dmg` — Apple Silicon (M1/M2/M3)
+- `SakuraClipboard-x86_64.dmg` — Intel
+
+## Build from Source
 
 ```bash
 ./build.sh
 ```
 
-Build outputs:
-
+Outputs:
 - `SakuraClipboard.app`
 - `SakuraClipboard.dmg`
 
-The DMG includes:
+## Keyboard Shortcuts
 
-- `SakuraClipboard.app`
-- `Applications` shortcut link
-
-## Usage Notes
-
-- Access the app from the macOS menu bar.
-- Open History to browse recent clipboard items.
-- Scroll inside History to load more items.
-- Hover over an image item to preview it.
-- Choose Auto Clean to set retention time.
-- Choose History Limit to set the maximum number of saved items.
+| Shortcut | Action |
+|----------|--------|
+| `Cmd+Shift+C` | Open history menu |
+| `Cmd+Shift+F` | Open search panel |
 
 ## Project Structure
 
-- `Sources/ClipboardItem.swift` - item model
-- `Sources/ClipboardStore.swift` - SQLite persistence and history querying
-- `Sources/ClipboardMonitor.swift` - clipboard monitoring
-- `Sources/HistoryListPopoverController.swift` - embedded menu history list
-- `Sources/AppDelegate.swift` - app lifecycle and status bar behavior
-- `Sources/main.swift` - app entry point
+```
+Sources/
+├── AppDelegate.swift           # App lifecycle, menu bar, settings
+├── ClipboardItem.swift         # Data model
+├── ClipboardStore.swift        # SQLite storage
+├── ClipboardMonitor.swift      # Clipboard polling
+├── HistoryListPopoverController.swift  # History list UI
+├── SearchPanel.swift           # Search panel UI
+├── HUDWindow.swift             # Copy notification
+├── KeyboardShortcut.swift      # Global hotkeys
+├── ThemeManager.swift          # Dark/light mode
+├── Localization.swift          # i18n
+└── main.swift                  # Entry point
+```
+
+## License
+
+MIT
 
 ## Author
 

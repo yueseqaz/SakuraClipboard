@@ -1,54 +1,66 @@
 # SakuraClipboard
 
-SakuraClipboard 是一个轻量的 macOS 菜单栏剪贴板历史工具。它在本地保存最近的文本和图片记录，从系统菜单栏打开，不提供额外主面板。
+轻量级 macOS 菜单栏剪贴板历史工具。从系统菜单栏快速访问文本和图片记录。
+
+[![Build](https://github.com/YOUR_USERNAME/SakuraClipboard/actions/workflows/build.yml/badge.svg)](https://github.com/YOUR_USERNAME/SakuraClipboard/actions/workflows/build.yml)
 
 ## 功能特性
 
-- 自动记录文本与图片剪贴板历史
-- 原生菜单栏界面，没有主面板
-- 菜单内显示当前剪贴板摘要
-- 固定高度 History 菜单，支持内部滚动和继续加载
-- 点击历史条目即可重新复制到剪贴板
-- 图片历史支持悬停预览
-- 支持按保留时间自动清理
-- 支持设置历史条数上限：100、200、350、500、1000、2000、5000
-- 使用 SQLite 本地存储
-- 支持中文/英文界面切换
-- 支持开机自启
+- **剪贴板历史** — 自动保存文本和图片记录
+- **快速访问** — 菜单栏点击或 `Cmd+Shift+C` 打开
+- **搜索** — `Cmd+Shift+F` 打开搜索面板，支持中文输入
+- **预览** — 点击"预览"按钮查看完整文本，悬停图片可预览
+- **收藏** — 右键收藏条目
+- **自动清理** — 可配置保留时间（1-30 天或永久）
+- **历史条数** — 100 到 5000 条
+- **忽略应用** — 排除特定应用的剪贴板监听
+- **开机自启** — 可选自动启动
+- **中英文界面** — 语言切换
 
-## 构建方式
+## 下载
+
+从 [Releases](https://github.com/YOUR_USERNAME/SakuraClipboard/releases) 下载最新 DMG：
+
+- `SakuraClipboard-arm64.dmg` — Apple Silicon (M1/M2/M3)
+- `SakuraClipboard-x86_64.dmg` — Intel
+
+## 从源码构建
 
 ```bash
 ./build.sh
 ```
 
-构建产物：
-
+输出：
 - `SakuraClipboard.app`
 - `SakuraClipboard.dmg`
 
-DMG 内容：
+## 快捷键
 
-- `SakuraClipboard.app`
-- `Applications` 快捷方式
-
-## 使用说明
-
-- 从 macOS 菜单栏打开应用。
-- 打开 History 查看最近的剪贴板记录。
-- 在 History 内滚动可继续加载更多记录。
-- 鼠标悬停在图片条目上可预览图片。
-- 通过 Auto Clean 设置记录保留时间。
-- 通过 History Limit 设置最多保存多少条记录。
+| 快捷键 | 功能 |
+|--------|------|
+| `Cmd+Shift+C` | 打开历史菜单 |
+| `Cmd+Shift+F` | 打开搜索面板 |
 
 ## 项目结构
 
-- `Sources/ClipboardItem.swift`：数据模型
-- `Sources/ClipboardStore.swift`：SQLite 存储与历史查询
-- `Sources/ClipboardMonitor.swift`：剪贴板监听
-- `Sources/HistoryListPopoverController.swift`：菜单内历史列表
-- `Sources/AppDelegate.swift`：应用生命周期与菜单栏行为
-- `Sources/main.swift`：程序入口
+```
+Sources/
+├── AppDelegate.swift           # 应用生命周期、菜单栏、设置
+├── ClipboardItem.swift         # 数据模型
+├── ClipboardStore.swift        # SQLite 存储
+├── ClipboardMonitor.swift      # 剪贴板监听
+├── HistoryListPopoverController.swift  # 历史列表 UI
+├── SearchPanel.swift           # 搜索面板 UI
+├── HUDWindow.swift             # 复制提示
+├── KeyboardShortcut.swift      # 全局快捷键
+├── ThemeManager.swift          # 深色/浅色模式
+├── Localization.swift          # 国际化
+└── main.swift                  # 入口
+```
+
+## 许可证
+
+MIT
 
 ## 作者
 
