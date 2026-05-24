@@ -1,5 +1,47 @@
 import Cocoa
 
+private final class HoverTableView: NSTableView {
+    var onHoverRow: ((Int?) -> Void)?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        let ta = NSTrackingArea(
+            rect: .zero,
+            options: [.inVisibleRect, .activeAlways, .mouseMoved, .mouseEnteredAndExited],
+            owner: self
+        )
+        addTrackingArea(ta)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        let r = row(at: p)
+        onHoverRow?(r >= 0 ? r : nil)
+        super.mouseMoved(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHoverRow?(nil)
+        super.mouseExited(with: event)
+    }
+}
+
+private final class HoverRowView: NSTableRowView {
+    var isHovering = false {
+        didSet { needsDisplay = true }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if isHovering {
+            NSColor.systemBlue.withAlphaComponent(0.2).setFill()
+            let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 1), xRadius: 4, yRadius: 4)
+            path.fill()
+        }
+        super.draw(dirtyRect)
+    }
+}
+
 final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate, NSWindowDelegate {
     private let pageSize = 50
     private var items: [ClipboardItem] = []
@@ -8,11 +50,12 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
     private var hasMore = true
 
     private let searchField = NSSearchField()
-    private let tableView = NSTableView()
+    private let tableView = HoverTableView()
     private let scrollView = NSScrollView()
     private let effectView = NSVisualEffectView()
     private let hintLabel = NSTextField(labelWithString: "")
     private let thumbnailCache = NSCache<NSString, NSImage>()
+    private var hoveredRow: Int?
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 520))
@@ -72,6 +115,9 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
         tableView.dataSource = self
         tableView.target = self
         tableView.action = #selector(copySelected)
+        tableView.onHoverRow = { [weak self] row in
+            self?.handleHover(row)
+        }
 
         let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("main"))
         col.resizingMask = .autoresizingMask
@@ -149,7 +195,15 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
     func numberOfRows(in tableView: NSTableView) -> Int { items.count }
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
-        let rowView = NSTableRowView()
+        let id = NSUserInterfaceItemIdentifier("hoverRowView")
+        let rowView: HoverRowView
+        if let reused = tableView.makeView(withIdentifier: id, owner: self) as? HoverRowView {
+            rowView = reused
+        } else {
+            rowView = HoverRowView()
+            rowView.identifier = id
+        }
+        rowView.isHovering = (row == hoveredRow)
         return rowView
     }
 
@@ -256,6 +310,17 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
         }
         HUDWindow.show(I18N.t("已复制", "Copied"))
         view.window?.close()
+    }
+
+    private func handleHover(_ row: Int?) {
+        let previous = hoveredRow
+        hoveredRow = row
+        if let previous {
+            (tableView.rowView(atRow: previous, makeIfNecessary: false) as? HoverRowView)?.isHovering = false
+        }
+        if let row {
+            (tableView.rowView(atRow: row, makeIfNecessary: false) as? HoverRowView)?.isHovering = true
+        }
     }
 }
 
