@@ -4,15 +4,42 @@ import Carbon.HIToolbox
 final class KeyboardShortcut {
     static let shared = KeyboardShortcut()
 
-    private var hotKeyRef: EventHotKeyRef?
-    private var handler: EventHandlerRef?
-    private var action: (() -> Void)?
+    private var registrations: [HotKeyRegistration] = []
 
     private init() {}
 
     func register(key: Int, modifiers: NSEvent.ModifierFlags, action: @escaping () -> Void) {
-        self.action = action
+        let registration = HotKeyRegistration(key: key, modifiers: modifiers, action: action)
+        registrations.append(registration)
+    }
 
+    func unregisterAll() {
+        for reg in registrations {
+            reg.unregister()
+        }
+        registrations.removeAll()
+    }
+
+    deinit {
+        unregisterAll()
+    }
+}
+
+private class HotKeyRegistration {
+    var hotKeyRef: EventHotKeyRef?
+    var handler: EventHandlerRef?
+    let action: () -> Void
+    let key: Int
+    let modifiers: NSEvent.ModifierFlags
+
+    init(key: Int, modifiers: NSEvent.ModifierFlags, action: @escaping () -> Void) {
+        self.key = key
+        self.modifiers = modifiers
+        self.action = action
+        register()
+    }
+
+    private func register() {
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
@@ -35,7 +62,7 @@ final class KeyboardShortcut {
             &handler
         )
 
-        let hotKeyID = EventHotKeyID(signature: OSType(0x53434C50), id: 1) // 'SCLP'
+        let hotKeyID = EventHotKeyID(signature: OSType(0x53434C50), id: UInt32(key))
         RegisterEventHotKey(
             UInt32(key),
             modifiers.carbonFlags,
