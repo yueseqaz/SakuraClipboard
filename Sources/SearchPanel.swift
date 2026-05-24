@@ -1,6 +1,6 @@
 import Cocoa
 
-final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
+final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate, NSWindowDelegate {
     private let pageSize = 50
     private var items: [ClipboardItem] = []
     private var offset = 0
@@ -29,6 +29,10 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
         } else {
             super.keyDown(with: event)
         }
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        return true
     }
 
     private func buildUI() {
@@ -307,6 +311,7 @@ final class SearchPanel {
 
         let searchController = SearchPanelController()
         newPanel.contentViewController = searchController
+        newPanel.delegate = searchController
         newPanel.makeKeyAndOrderFront(nil)
 
         self.panel = newPanel
