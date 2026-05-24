@@ -285,7 +285,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             let previewBtn = NSButton()
             previewBtn.tag = 103
             previewBtn.bezelStyle = .inline
-            previewBtn.title = I18N.t("预览", "Preview")
+            previewBtn.title = I18N.t("预览", "Peek")
             previewBtn.font = NSFont.systemFont(ofSize: 10)
             previewBtn.translatesAutoresizingMaskIntoConstraints = false
             previewBtn.isBordered = false
