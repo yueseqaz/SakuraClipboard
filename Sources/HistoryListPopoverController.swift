@@ -79,6 +79,8 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     private let titleLabel = NSTextField(labelWithString: "")
     private let topDivider = NSBox()
     private let effectView = NSVisualEffectView()
+    private let searchField = NSSearchField()
+    private var searchKeyword = ""
     private var scrollTopWithHeaderConstraint: NSLayoutConstraint?
     private var scrollTopCompactConstraint: NSLayoutConstraint?
 
@@ -125,6 +127,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         view.frame = NSRect(x: 0, y: 0, width: width, height: height)
         titleLabel.isHidden = true
         topDivider.isHidden = true
+        searchField.isHidden = true
         scrollTopWithHeaderConstraint?.isActive = false
         scrollTopCompactConstraint?.isActive = true
         tableView.rowHeight = 24
@@ -181,9 +184,17 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
         effectView.addSubview(titleLabel)
         effectView.addSubview(topDivider)
+        effectView.addSubview(searchField)
         effectView.addSubview(scrollView)
 
-        scrollTopWithHeaderConstraint = scrollView.topAnchor.constraint(equalTo: topDivider.bottomAnchor, constant: 8)
+        searchField.placeholderString = I18N.t("搜索历史记录...", "Search history...")
+        searchField.font = NSFont.systemFont(ofSize: 13)
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+        searchField.target = self
+        searchField.action = #selector(searchChanged)
+        searchField.sendsSearchStringImmediately = true
+
+        scrollTopWithHeaderConstraint = searchField.bottomAnchor.constraint(equalTo: scrollView.topAnchor, constant: -8)
         scrollTopCompactConstraint = scrollView.topAnchor.constraint(equalTo: effectView.topAnchor, constant: 6)
         scrollTopCompactConstraint?.isActive = false
 
@@ -199,6 +210,11 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             topDivider.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
             topDivider.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 8),
             topDivider.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -8),
+
+            searchField.topAnchor.constraint(equalTo: topDivider.bottomAnchor, constant: 8),
+            searchField.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 12),
+            searchField.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -12),
+            searchField.heightAnchor.constraint(equalToConstant: 28),
 
             scrollTopWithHeaderConstraint!,
             scrollView.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 8),
@@ -219,6 +235,11 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         resetAndLoad()
     }
 
+    @objc private func searchChanged() {
+        searchKeyword = searchField.stringValue
+        resetAndLoad()
+    }
+
     @objc private func scrollChanged() {
         guard let doc = scrollView.documentView else { return }
         let visibleMaxY = scrollView.contentView.bounds.maxY
@@ -235,7 +256,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         isLoading = true
 
         let query = ClipboardStore.Query(
-            keyword: "",
+            keyword: searchKeyword,
             filterType: .all,
             favoritesOnly: mode == .favorites,
             favoriteFolder: nil
