@@ -90,6 +90,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     private let previewImageCache = NSCache<NSString, NSImage>()
     private let previewLoadQueue = DispatchQueue(label: "com.sakura.clipboard.history.preview", qos: .userInitiated)
     private var pendingPreviewItemID: String?
+    private var localMonitor: Any?
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 420))
@@ -104,6 +105,10 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             name: .clipboardUpdated,
             object: nil
         )
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            self?.handleKeyDown(event)
+            return event
+        }
     }
 
     override func viewDidDisappear() {
@@ -113,6 +118,9 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
     deinit {
         destroyPreviewPanel()
+        if let localMonitor {
+            NSEvent.removeMonitor(localMonitor)
+        }
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -241,6 +249,19 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         resetAndLoad()
     }
 
+    private func handleKeyDown(_ event: NSEvent) {
+        // Number keys 1-9 for quick paste
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty {
+            let chars = event.charactersIgnoringModifiers ?? ""
+            if let num = Int(chars), num >= 1, num <= 9, num <= items.count {
+                let index = num - 1
+                let item = items[index]
+                copyItem(item)
+                tableView.deselectRow(index)
+            }
+        }
+    }
+
     @objc private func scrollChanged() {
         guard let doc = scrollView.documentView else { return }
         let visibleMaxY = scrollView.contentView.bounds.maxY
@@ -347,11 +368,13 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         timeLabel?.textColor = row == hoveredRow ? .selectedMenuItemTextColor : .secondaryLabelColor
 
         if let text = item.text, !text.isEmpty {
-            label?.stringValue = short(text)
+            let prefix = row < 9 ? "\(row + 1)  " : "   "
+            label?.stringValue = prefix + short(text)
             icon?.image = nil
             icon?.isHidden = true
         } else {
-            label?.stringValue = I18N.t("[图片]", "[Image]")
+            let prefix = row < 9 ? "\(row + 1)  " : "   "
+            label?.stringValue = prefix + I18N.t("[图片]", "[Image]")
             icon?.image = thumbnail(for: item)
             icon?.isHidden = false
         }
