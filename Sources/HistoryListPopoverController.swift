@@ -627,6 +627,9 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         textPreviewWorkItem?.cancel()
         pendingPreviewItemID = nil
         previewPanel?.orderOut(nil)
+        previewPanel?.close()
+        previewPanel = nil
+        previewImageView = nil
     }
 
     private func destroyPreviewPanel() {
