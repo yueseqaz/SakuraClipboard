@@ -257,7 +257,7 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
 
                 timeLabel.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
                 timeLabel.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                timeLabel.widthAnchor.constraint(equalToConstant: 55)
+                timeLabel.widthAnchor.constraint(equalToConstant: 45)
             ])
         }
 

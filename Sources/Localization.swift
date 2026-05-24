@@ -33,19 +33,19 @@ struct I18N {
         let interval = now.timeIntervalSince(date)
 
         if interval < 60 {
-            return current == .zh ? "刚刚" : "Just now"
+            return current == .zh ? "刚刚" : "Now"
         } else if interval < 3600 {
             let mins = Int(interval / 60)
-            return current == .zh ? "\(mins)分钟前" : "\(mins)m ago"
+            return "\(mins)min"
         } else if interval < 86400 {
             let hours = Int(interval / 3600)
-            return current == .zh ? "\(hours)小时前" : "\(hours)h ago"
+            return "\(hours)h"
         } else if interval < 604800 {
             let days = Int(interval / 86400)
-            return current == .zh ? "\(days)天前" : "\(days)d ago"
+            return "\(days)d"
         } else {
             let formatter = DateFormatter()
-            formatter.dateFormat = current == .zh ? "MM/dd" : "MM/dd"
+            formatter.dateFormat = "MM/dd"
             return formatter.string(from: date)
         }
     }

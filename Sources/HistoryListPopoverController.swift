@@ -303,7 +303,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
                 timeLabel.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
                 timeLabel.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                timeLabel.widthAnchor.constraint(equalToConstant: 60)
+                timeLabel.widthAnchor.constraint(equalToConstant: 45)
             ])
         }
 
