@@ -8,30 +8,35 @@ on:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - os: macos-14
-            arch: arm64
-            name: Apple Silicon
-          - os: macos-13
-            arch: x86_64
-            name: Intel
-    
-    runs-on: ${{ matrix.os }}
-    name: Build (${{ matrix.name }})
+    runs-on: macos-14
+    name: Build Universal Binary
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       
-      - name: Build
-        run: chmod +x build.sh && ./build.sh
+      - name: Build Universal Binary
+        run: |
+          chmod +x build.sh
+          # Build for ARM
+          swiftc -O -framework Cocoa -framework ServiceManagement -framework Carbon -lsqlite3 \
+            -target arm64-apple-macos11.0 \
+            Sources/*.swift -o build/SakuraClipboard-arm64
+          # Build for Intel
+          swiftc -O -framework Cocoa -framework ServiceManagement -framework Carbon -lsqlite3 \
+            -target x86_64-apple-macos11.0 \
+            Sources/*.swift -o build/SakuraClipboard-x86_64
+          # Create universal binary
+          lipo -create -output build/SakuraClipboard \
+            build/SakuraClipboard-arm64 \
+            build/SakuraClipboard-x86_64
+          # Package
+          ./build.sh
       
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: SakuraClipboard-${{ matrix.arch }}
+          name: SakuraClipboard
           path: SakuraClipboard.dmg
 
   release:
@@ -48,9 +53,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            artifacts/SakuraClipboard-arm64/SakuraClipboard.dmg
-            artifacts/SakuraClipboard-x86_64/SakuraClipboard.dmg
+          files: artifacts/SakuraClipboard/SakuraClipboard.dmg
           generate_release_notes: true
           name: SakuraClipboard ${{ github.ref_name }}
         env:
