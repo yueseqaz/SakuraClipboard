@@ -64,7 +64,7 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
         tableView.headerView = nil
-        tableView.rowHeight = 40
+        tableView.rowHeight = 44
         tableView.intercellSpacing = NSSize(width: 0, height: 1)
         tableView.backgroundColor = .clear
         tableView.selectionHighlightStyle = .none
@@ -194,7 +194,7 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
                 container.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
                 container.trailingAnchor.constraint(equalTo: timeLabel.leadingAnchor, constant: -8),
                 container.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                container.heightAnchor.constraint(equalToConstant: 32),
+                container.heightAnchor.constraint(equalToConstant: 36),
 
                 icon.leadingAnchor.constraint(equalTo: container.leadingAnchor),
                 icon.centerYAnchor.constraint(equalTo: container.centerYAnchor),
