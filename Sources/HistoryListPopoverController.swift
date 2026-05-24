@@ -285,26 +285,26 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             let previewBtn = NSButton()
             previewBtn.tag = 103
             previewBtn.bezelStyle = .inline
-            previewBtn.title = "👁"
-            previewBtn.font = NSFont.systemFont(ofSize: 12)
+            previewBtn.title = I18N.t("预览", "Preview")
+            previewBtn.font = NSFont.systemFont(ofSize: 10)
             previewBtn.translatesAutoresizingMaskIntoConstraints = false
             previewBtn.isBordered = false
             previewBtn.setContentHuggingPriority(.required, for: .horizontal)
             cell.addSubview(previewBtn)
 
             NSLayoutConstraint.activate([
-                icon.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
+                previewBtn.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
+                previewBtn.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                previewBtn.widthAnchor.constraint(equalToConstant: 30),
+
+                icon.leadingAnchor.constraint(equalTo: previewBtn.trailingAnchor, constant: 2),
                 icon.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
                 icon.widthAnchor.constraint(equalToConstant: 16),
                 icon.heightAnchor.constraint(equalToConstant: 16),
 
                 label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 6),
-                label.trailingAnchor.constraint(equalTo: previewBtn.leadingAnchor, constant: -4),
+                label.trailingAnchor.constraint(equalTo: timeLabel.leadingAnchor, constant: -4),
                 label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-
-                previewBtn.trailingAnchor.constraint(equalTo: timeLabel.leadingAnchor, constant: -4),
-                previewBtn.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                previewBtn.widthAnchor.constraint(equalToConstant: 20),
 
                 timeLabel.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
                 timeLabel.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
@@ -330,7 +330,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             label?.stringValue = short(text)
             icon?.image = nil
             icon?.isHidden = true
-            previewBtn?.isHidden = text.count <= 42
+            previewBtn?.isHidden = false
         } else {
             label?.stringValue = I18N.t("[图片]", "[Image]")
             icon?.image = thumbnail(for: item)
