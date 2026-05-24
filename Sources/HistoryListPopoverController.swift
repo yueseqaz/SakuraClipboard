@@ -112,12 +112,6 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         )
     }
 
-    override func viewDidAppear() {
-        super.viewDidAppear()
-        // Prevent search field from auto-focusing
-        view.window?.makeFirstResponder(tableView)
-    }
-
     override func viewDidDisappear() {
         super.viewDidDisappear()
         destroyPreviewPanel()
