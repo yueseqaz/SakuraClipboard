@@ -31,9 +31,8 @@ private final class HoverHistoryTableView: NSTableView {
         let row = self.row(at: point)
         if row >= 0 {
             selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-            return self.menu
         }
-        return nil
+        return super.menu(for: event)
     }
 }
 
