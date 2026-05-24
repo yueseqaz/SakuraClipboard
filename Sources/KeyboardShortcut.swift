@@ -1,62 +1,79 @@
 import Cocoa
+import Carbon.HIToolbox
 
 final class KeyboardShortcut {
     static let shared = KeyboardShortcut()
 
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
-    private var actions: [String: () -> Void] = [:]
+    private var hotKeyRef: EventHotKeyRef?
+    private var handler: EventHandlerRef?
+    private var action: (() -> Void)?
 
     private init() {}
 
-    func register(key: String, modifiers: NSEvent.ModifierFlags, action: @escaping () -> Void) {
-        let identifier = "\(key)-\(modifiers.rawValue)"
-        actions[identifier] = action
+    func register(key: Int, modifiers: NSEvent.ModifierFlags, action: @escaping () -> Void) {
+        self.action = action
 
-        // Re-register monitors
-        unregisterMonitors()
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
 
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleEvent(event)
-        }
+        let wrapper = Unmanaged.passRetained(HotKeyWrapper(action: action))
+        let ptr = wrapper.toOpaque()
 
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if self?.handleEvent(event) == true {
-                return nil // Consume the event
-            }
-            return event
-        }
+        InstallEventHandler(
+            GetApplicationEventTarget(),
+            { _, _, ptr -> OSStatus in
+                guard let ptr else { return OSStatus(eventNotHandledErr) }
+                let wrapper = Unmanaged<HotKeyWrapper>.fromOpaque(ptr).takeUnretainedValue()
+                wrapper.action()
+                return noErr
+            },
+            1,
+            &eventType,
+            ptr,
+            &handler
+        )
+
+        let hotKeyID = EventHotKeyID(signature: OSType(0x53434C50), id: 1) // 'SCLP'
+        RegisterEventHotKey(
+            UInt32(key),
+            modifiers.carbonFlags,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &hotKeyRef
+        )
     }
 
-    private func handleEvent(_ event: NSEvent) -> Bool {
-        let key = event.charactersIgnoringModifiers ?? ""
-        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-
-        let identifier = "\(key)-\(modifiers.rawValue)"
-        if let action = actions[identifier] {
-            action()
-            return true
+    func unregister() {
+        if let hotKeyRef {
+            UnregisterEventHotKey(hotKeyRef)
+            self.hotKeyRef = nil
         }
-        return false
-    }
-
-    private func unregisterMonitors() {
-        if let globalMonitor {
-            NSEvent.removeMonitor(globalMonitor)
-            self.globalMonitor = nil
+        if let handler {
+            RemoveEventHandler(handler)
+            self.handler = nil
         }
-        if let localMonitor {
-            NSEvent.removeMonitor(localMonitor)
-            self.localMonitor = nil
-        }
-    }
-
-    func unregisterAll() {
-        unregisterMonitors()
-        actions.removeAll()
     }
 
     deinit {
-        unregisterAll()
+        unregister()
+    }
+}
+
+private class HotKeyWrapper {
+    let action: () -> Void
+    init(action: @escaping () -> Void) { self.action = action }
+}
+
+extension NSEvent.ModifierFlags {
+    var carbonFlags: UInt32 {
+        var flags: UInt32 = 0
+        if contains(.command) { flags |= UInt32(cmdKey) }
+        if contains(.option) { flags |= UInt32(optionKey) }
+        if contains(.control) { flags |= UInt32(controlKey) }
+        if contains(.shift) { flags |= UInt32(shiftKey) }
+        return flags
     }
 }
