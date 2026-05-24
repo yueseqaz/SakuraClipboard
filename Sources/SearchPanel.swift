@@ -107,7 +107,7 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
         tableView.headerView = nil
-        tableView.rowHeight = 32
+        tableView.rowHeight = 28
         tableView.intercellSpacing = NSSize(width: 0, height: 1)
         tableView.backgroundColor = .clear
         tableView.selectionHighlightStyle = .none
@@ -231,6 +231,7 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
             let label = NSTextField(labelWithString: "")
             label.tag = 201
             label.font = NSFont.systemFont(ofSize: 13)
+            label.maximumNumberOfLines = 1
             label.lineBreakMode = .byTruncatingTail
             label.translatesAutoresizingMaskIntoConstraints = false
             cell.addSubview(label)
@@ -252,6 +253,7 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
                 label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 6),
                 label.trailingAnchor.constraint(equalTo: timeLabel.leadingAnchor, constant: -8),
                 label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                label.heightAnchor.constraint(equalToConstant: 16),
 
                 timeLabel.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
                 timeLabel.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
