@@ -282,6 +282,16 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             timeLabel.translatesAutoresizingMaskIntoConstraints = false
             cell.addSubview(timeLabel)
 
+            let previewBtn = NSButton()
+            previewBtn.tag = 103
+            previewBtn.bezelStyle = .inline
+            previewBtn.title = "👁"
+            previewBtn.font = NSFont.systemFont(ofSize: 12)
+            previewBtn.translatesAutoresizingMaskIntoConstraints = false
+            previewBtn.isBordered = false
+            previewBtn.setContentHuggingPriority(.required, for: .horizontal)
+            cell.addSubview(previewBtn)
+
             NSLayoutConstraint.activate([
                 icon.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
                 icon.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
@@ -289,8 +299,12 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
                 icon.heightAnchor.constraint(equalToConstant: 16),
 
                 label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 6),
-                label.trailingAnchor.constraint(equalTo: timeLabel.leadingAnchor, constant: -4),
+                label.trailingAnchor.constraint(equalTo: previewBtn.leadingAnchor, constant: -4),
                 label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+
+                previewBtn.trailingAnchor.constraint(equalTo: timeLabel.leadingAnchor, constant: -4),
+                previewBtn.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                previewBtn.widthAnchor.constraint(equalToConstant: 20),
 
                 timeLabel.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
                 timeLabel.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
@@ -301,19 +315,27 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         let icon = cell.viewWithTag(100) as? NSImageView
         let label = cell.viewWithTag(101) as? NSTextField
         let timeLabel = cell.viewWithTag(102) as? NSTextField
+        let previewBtn = cell.viewWithTag(103) as? NSButton
 
         label?.textColor = row == hoveredRow ? .selectedMenuItemTextColor : .labelColor
         timeLabel?.stringValue = I18N.relativeTime(from: item.date)
         timeLabel?.textColor = row == hoveredRow ? .selectedMenuItemTextColor : .tertiaryLabelColor
 
+        // Setup preview button
+        previewBtn?.target = self
+        previewBtn?.action = #selector(previewButtonClicked(_:))
+        previewBtn?.tag = row
+
         if let text = item.text, !text.isEmpty {
             label?.stringValue = short(text)
             icon?.image = nil
             icon?.isHidden = true
+            previewBtn?.isHidden = text.count <= 42
         } else {
             label?.stringValue = I18N.t("[图片]", "[Image]")
             icon?.image = thumbnail(for: item)
             icon?.isHidden = false
+            previewBtn?.isHidden = false
         }
 
         return cell
@@ -428,6 +450,17 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         guard let id = sender.representedObject as? String else { return }
         ClipboardStore.shared.deleteItem(id: id)
         resetAndLoad()
+    }
+
+    @objc private func previewButtonClicked(_ sender: NSButton) {
+        let row = sender.tag
+        guard row >= 0, row < items.count else { return }
+        let item = items[row]
+        if item.kind == .text, let text = item.text {
+            showTextPreview(text)
+        } else if item.kind == .image {
+            showPreview(for: item)
+        }
     }
 
     // MARK: - Hover & Preview
