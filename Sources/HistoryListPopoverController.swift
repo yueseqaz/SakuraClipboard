@@ -95,6 +95,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     private let previewImageCache = NSCache<NSString, NSImage>()
     private let previewLoadQueue = DispatchQueue(label: "com.sakura.clipboard.history.preview", qos: .userInitiated)
     private var pendingPreviewItemID: String?
+    private var textPreviewWorkItem: DispatchWorkItem?
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 336, height: 420))
@@ -440,6 +441,9 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             setRowTextColor(row, isHovering: true)
         }
 
+        // Cancel text preview delay
+        textPreviewWorkItem?.cancel()
+
         guard let row, row >= 0, row < items.count else {
             hidePreview()
             return
@@ -448,7 +452,12 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         if item.kind == .image {
             showPreview(for: item)
         } else if item.kind == .text, let text = item.text, text.count > 42 {
-            showTextPreview(text)
+            // Delay text preview by 0.5s
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.showTextPreview(text)
+            }
+            textPreviewWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
         } else {
             hidePreview()
         }
@@ -589,6 +598,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     }
 
     private func hidePreview() {
+        textPreviewWorkItem?.cancel()
         pendingPreviewItemID = nil
         previewPanel?.orderOut(nil)
     }
