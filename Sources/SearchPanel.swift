@@ -64,7 +64,7 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
         tableView.headerView = nil
-        tableView.rowHeight = 44
+        tableView.rowHeight = 32
         tableView.intercellSpacing = NSSize(width: 0, height: 1)
         tableView.backgroundColor = .clear
         tableView.selectionHighlightStyle = .none
@@ -165,25 +165,24 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
             cell = NSTableCellView()
             cell.identifier = cellId
 
-            let container = NSView()
-            container.translatesAutoresizingMaskIntoConstraints = false
-            cell.addSubview(container)
-
             let icon = NSImageView()
-            icon.translatesAutoresizingMaskIntoConstraints = false
+            icon.tag = 200
             icon.imageScaling = .scaleProportionallyDown
+            icon.translatesAutoresizingMaskIntoConstraints = false
             icon.wantsLayer = true
-            icon.layer?.cornerRadius = 4
+            icon.layer?.cornerRadius = 3
             icon.layer?.masksToBounds = true
-            container.addSubview(icon)
+            cell.addSubview(icon)
 
             let label = NSTextField(labelWithString: "")
+            label.tag = 201
             label.font = NSFont.systemFont(ofSize: 13)
             label.lineBreakMode = .byTruncatingTail
             label.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(label)
+            cell.addSubview(label)
 
             let timeLabel = NSTextField(labelWithString: "")
+            timeLabel.tag = 202
             timeLabel.font = NSFont.systemFont(ofSize: 10)
             timeLabel.textColor = .tertiaryLabelColor
             timeLabel.alignment = .right
@@ -191,39 +190,29 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
             cell.addSubview(timeLabel)
 
             NSLayoutConstraint.activate([
-                container.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
-                container.trailingAnchor.constraint(equalTo: timeLabel.leadingAnchor, constant: -8),
-                container.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                container.heightAnchor.constraint(equalToConstant: 36),
+                icon.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
+                icon.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                icon.widthAnchor.constraint(equalToConstant: 16),
+                icon.heightAnchor.constraint(equalToConstant: 16),
 
-                icon.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-                icon.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-                icon.widthAnchor.constraint(equalToConstant: 20),
-                icon.heightAnchor.constraint(equalToConstant: 20),
-
-                label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8),
-                label.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-                label.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 6),
+                label.trailingAnchor.constraint(equalTo: timeLabel.leadingAnchor, constant: -8),
+                label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
 
                 timeLabel.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
                 timeLabel.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                timeLabel.widthAnchor.constraint(equalToConstant: 60)
+                timeLabel.widthAnchor.constraint(equalToConstant: 55)
             ])
         }
 
-        // Find subviews
-        let container = cell.subviews.first
-        let icon = container?.subviews.first(where: { $0 is NSImageView }) as? NSImageView
-        let label = container?.subviews.first(where: { $0 is NSTextField }) as? NSTextField
-        let timeLabel = cell.subviews.first(where: {
-            ($0 as? NSTextField)?.alignment == .right
-        }) as? NSTextField
+        let icon = cell.viewWithTag(200) as? NSImageView
+        let label = cell.viewWithTag(201) as? NSTextField
+        let timeLabel = cell.viewWithTag(202) as? NSTextField
 
-        // Configure
         timeLabel?.stringValue = I18N.relativeTime(from: item.date)
 
         if let text = item.text, !text.isEmpty {
-            label?.stringValue = String(text.prefix(60))
+            label?.stringValue = String(text.prefix(50))
             icon?.image = nil
             icon?.isHidden = true
         } else {
