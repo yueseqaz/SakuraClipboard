@@ -426,6 +426,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         } else if let image = ClipboardStore.shared.image(for: item.id) {
             pb.writeObjects([image])
         }
+        HUDWindow.show(I18N.t("已复制", "Copied"))
     }
 
     private func createContextMenu() -> NSMenu {
