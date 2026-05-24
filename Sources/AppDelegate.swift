@@ -29,11 +29,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         KeyboardShortcut.shared.register(key: kVK_ANSI_C, modifiers: [.command, .shift]) { [weak self] in
             self?.showFromKeyboard()
         }
+
+        KeyboardShortcut.shared.register(key: kVK_ANSI_F, modifiers: [.command, .shift]) { [weak self] in
+            self?.openSearch()
+        }
     }
 
     @objc private func showFromKeyboard() {
         guard let btn = statusItem.button else { return }
         showNativeMenu(relativeTo: btn)
+    }
+
+    @objc private func openSearch() {
+        SearchPanel.shared.show()
     }
 
     @objc func toggle() {
@@ -56,6 +64,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let history = NSMenuItem(title: I18N.t("历史记录", "History"), action: nil, keyEquivalent: "")
         history.submenu = makeInlineHistorySubmenu(mode: .all)
         menu.addItem(history)
+
+        let searchItem = NSMenuItem(title: I18N.t("搜索...", "Search..."), action: #selector(openSearch), keyEquivalent: "f")
+        searchItem.target = self
+        searchItem.keyEquivalentModifierMask = [.command, .shift]
+        menu.addItem(searchItem)
 
         menu.addItem(.separator())
 
