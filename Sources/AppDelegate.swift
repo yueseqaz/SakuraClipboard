@@ -1,5 +1,4 @@
 import Cocoa
-import Carbon.HIToolbox
 import ServiceManagement
 
 // MARK: - App Delegate
@@ -26,11 +25,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         monitor.start()
 
-        KeyboardShortcut.shared.register(key: kVK_ANSI_C, modifiers: [.command, .shift]) { [weak self] in
+        KeyboardShortcut.shared.register(key: "c", modifiers: [.command, .shift]) { [weak self] in
             self?.showFromKeyboard()
         }
 
-        KeyboardShortcut.shared.register(key: kVK_ANSI_F, modifiers: [.command, .shift]) { [weak self] in
+        KeyboardShortcut.shared.register(key: "f", modifiers: [.command, .shift]) { [weak self] in
             self?.openSearch()
         }
     }
@@ -342,7 +341,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     try SMAppService.mainApp.unregister()
                 }
             } catch {
-                print("SMAppService error: \(error)")
             }
         } else {
             UserDefaults.standard.set(enabled, forKey: "launchAtLogin")
