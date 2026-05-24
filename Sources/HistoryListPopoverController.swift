@@ -335,7 +335,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             label?.stringValue = I18N.t("[图片]", "[Image]")
             icon?.image = thumbnail(for: item)
             icon?.isHidden = false
-            previewBtn?.isHidden = false
+            previewBtn?.isHidden = true
         }
 
         return cell
