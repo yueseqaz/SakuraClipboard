@@ -114,7 +114,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         submenu.autoenablesItems = false
 
         let controller = HistoryListPopoverController()
-        controller.loadViewIfNeeded()
+        _ = controller.view  // Load view
         controller.switchMode(mode)
         controller.setMenuEmbeddedStyle(width: 350, height: 404)
         inlineHistoryControllers.append(controller)

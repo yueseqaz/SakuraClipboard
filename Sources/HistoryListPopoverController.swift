@@ -118,7 +118,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     }
 
     func setMenuEmbeddedStyle(width: CGFloat, height: CGFloat) {
-        loadViewIfNeeded()
+        _ = view  // Load view
         view.frame = NSRect(x: 0, y: 0, width: width, height: height)
     }
 
