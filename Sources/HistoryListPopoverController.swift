@@ -112,22 +112,6 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         )
     }
 
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 49 { // Space bar
-            let row = tableView.selectedRow
-            if row >= 0, row < items.count {
-                let item = items[row]
-                if item.kind == .text, let text = item.text, text.count > 42 {
-                    showTextPreview(text)
-                }
-            }
-        } else if event.keyCode == 53 { // ESC
-            hidePreview()
-        } else {
-            super.keyDown(with: event)
-        }
-    }
-
     override func viewDidDisappear() {
         super.viewDidDisappear()
         destroyPreviewPanel()
@@ -409,6 +393,14 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         copyItem.representedObject = item.id
         menu.addItem(copyItem)
 
+        // Preview option for long text
+        if item.kind == .text, let text = item.text, text.count > 42 {
+            let previewItem = NSMenuItem(title: I18N.t("预览", "Preview"), action: #selector(contextPreview(_:)), keyEquivalent: "")
+            previewItem.target = self
+            previewItem.representedObject = text
+            menu.addItem(previewItem)
+        }
+
         menu.addItem(.separator())
 
         let favTitle = item.isFavorite ? I18N.t("取消收藏", "Unfavorite") : I18N.t("收藏", "Favorite")
@@ -429,6 +421,11 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         guard let id = sender.representedObject as? String else { return }
         guard let item = items.first(where: { $0.id == id }) else { return }
         copyItem(item)
+    }
+
+    @objc private func contextPreview(_ sender: NSMenuItem) {
+        guard let text = sender.representedObject as? String else { return }
+        showTextPreview(text)
     }
 
     @objc private func contextToggleFavorite(_ sender: NSMenuItem) {
