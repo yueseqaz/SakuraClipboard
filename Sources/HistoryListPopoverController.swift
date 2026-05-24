@@ -290,8 +290,16 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             label.lineBreakMode = .byTruncatingTail
             label.translatesAutoresizingMaskIntoConstraints = false
 
+            let timeLabel = NSTextField(labelWithString: "")
+            timeLabel.identifier = NSUserInterfaceItemIdentifier("timeLabel")
+            timeLabel.font = NSFont.systemFont(ofSize: 11)
+            timeLabel.textColor = .secondaryLabelColor
+            timeLabel.alignment = .right
+            timeLabel.translatesAutoresizingMaskIntoConstraints = false
+
             cell.addSubview(icon)
             cell.addSubview(label)
+            cell.addSubview(timeLabel)
 
             NSLayoutConstraint.activate([
                 icon.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
@@ -300,14 +308,21 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
                 icon.heightAnchor.constraint(equalToConstant: 18),
 
                 label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8),
-                label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
-                label.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
+                label.trailingAnchor.constraint(equalTo: timeLabel.leadingAnchor, constant: -8),
+                label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+
+                timeLabel.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
+                timeLabel.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                timeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 50)
             ])
         }
 
         let icon = cell.subviews.first(where: { $0.identifier?.rawValue == "icon" }) as? NSImageView
         let label = cell.subviews.first(where: { $0.identifier?.rawValue == "label" }) as? NSTextField
+        let timeLabel = cell.subviews.first(where: { $0.identifier?.rawValue == "timeLabel" }) as? NSTextField
         label?.textColor = row == hoveredRow ? .selectedMenuItemTextColor : .labelColor
+        timeLabel?.stringValue = I18N.relativeTime(from: item.date)
+        timeLabel?.textColor = row == hoveredRow ? .selectedMenuItemTextColor : .secondaryLabelColor
 
         if let text = item.text, !text.isEmpty {
             label?.stringValue = short(text)
