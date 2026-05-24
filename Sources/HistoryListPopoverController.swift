@@ -25,6 +25,15 @@ private final class HoverHistoryTableView: NSTableView {
         onHoverRow?(nil)
         super.mouseExited(with: event)
     }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let point = convert(event.locationInWindow, from: nil)
+        let row = self.row(at: point)
+        if row >= 0 {
+            selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        }
+        return super.menu(for: event)
+    }
 }
 
 private final class HoverHistoryRowView: NSTableRowView {
@@ -76,13 +85,9 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
     private let tableView = HoverHistoryTableView()
     private let scrollView = NSScrollView()
-    private let titleLabel = NSTextField(labelWithString: "")
-    private let topDivider = NSBox()
-    private let effectView = NSVisualEffectView()
     private let searchField = NSSearchField()
     private var searchKeyword = ""
-    private var scrollTopWithHeaderConstraint: NSLayoutConstraint?
-    private var scrollTopCompactConstraint: NSLayoutConstraint?
+    private let effectView = NSVisualEffectView()
 
     private var previewPanel: NSPanel?
     private var previewImageView: NSImageView?
@@ -90,10 +95,9 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     private let previewImageCache = NSCache<NSString, NSImage>()
     private let previewLoadQueue = DispatchQueue(label: "com.sakura.clipboard.history.preview", qos: .userInitiated)
     private var pendingPreviewItemID: String?
-    private var localMonitor: Any?
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 420))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 336, height: 420))
     }
 
     override func viewDidLoad() {
@@ -105,10 +109,6 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             name: .clipboardUpdated,
             object: nil
         )
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleKeyDown(event)
-            return event
-        }
     }
 
     override func viewDidDisappear() {
@@ -118,28 +118,17 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
     deinit {
         destroyPreviewPanel()
-        if let localMonitor {
-            NSEvent.removeMonitor(localMonitor)
-        }
         NotificationCenter.default.removeObserver(self)
     }
 
     func switchMode(_ mode: Mode) {
         self.mode = mode
-        titleLabel.stringValue = mode == .favorites ? I18N.t("收藏记录", "Favorites") : I18N.t("历史记录", "History")
         resetAndLoad()
     }
 
     func setMenuEmbeddedStyle(width: CGFloat, height: CGFloat) {
         loadViewIfNeeded()
         view.frame = NSRect(x: 0, y: 0, width: width, height: height)
-        titleLabel.isHidden = true
-        topDivider.isHidden = true
-        searchField.isHidden = true
-        scrollTopWithHeaderConstraint?.isActive = false
-        scrollTopCompactConstraint?.isActive = true
-        tableView.rowHeight = 24
-        tableView.intercellSpacing = NSSize(width: 0, height: 2)
     }
 
     private func buildUI() {
@@ -149,14 +138,13 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         effectView.state = .active
         view.addSubview(effectView)
 
-        titleLabel.stringValue = I18N.t("历史记录", "History")
-        titleLabel.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
-        titleLabel.textColor = .labelColor
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        topDivider.boxType = .separator
-        topDivider.borderColor = .separatorColor
-        topDivider.translatesAutoresizingMaskIntoConstraints = false
+        searchField.placeholderString = I18N.t("搜索...", "Search...")
+        searchField.font = NSFont.systemFont(ofSize: 13)
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+        searchField.target = self
+        searchField.action = #selector(searchChanged)
+        searchField.sendsSearchStringImmediately = true
+        effectView.addSubview(searchField)
 
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
@@ -171,8 +159,8 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         )
 
         tableView.headerView = nil
-        tableView.rowHeight = 25
-        tableView.intercellSpacing = NSSize(width: 0, height: 2)
+        tableView.rowHeight = 28
+        tableView.intercellSpacing = NSSize(width: 0, height: 1)
         tableView.backgroundColor = .clear
         tableView.selectionHighlightStyle = .none
         tableView.delegate = self
@@ -183,29 +171,17 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         tableView.onHoverRow = { [weak self] row in
             self?.handleHover(row)
         }
-        tableView.menu = createContextMenu()
+
+        let contextMenu = NSMenu()
+        contextMenu.delegate = self
+        tableView.menu = contextMenu
 
         let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("main"))
         col.width = 320
         tableView.addTableColumn(col)
 
         scrollView.documentView = tableView
-
-        effectView.addSubview(titleLabel)
-        effectView.addSubview(topDivider)
-        effectView.addSubview(searchField)
         effectView.addSubview(scrollView)
-
-        searchField.placeholderString = I18N.t("搜索历史记录...", "Search history...")
-        searchField.font = NSFont.systemFont(ofSize: 13)
-        searchField.translatesAutoresizingMaskIntoConstraints = false
-        searchField.target = self
-        searchField.action = #selector(searchChanged)
-        searchField.sendsSearchStringImmediately = true
-
-        scrollTopWithHeaderConstraint = searchField.bottomAnchor.constraint(equalTo: scrollView.topAnchor, constant: -8)
-        scrollTopCompactConstraint = scrollView.topAnchor.constraint(equalTo: effectView.topAnchor, constant: 6)
-        scrollTopCompactConstraint?.isActive = false
 
         NSLayoutConstraint.activate([
             effectView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -213,22 +189,15 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             effectView.topAnchor.constraint(equalTo: view.topAnchor),
             effectView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            titleLabel.topAnchor.constraint(equalTo: effectView.topAnchor, constant: 10),
-            titleLabel.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 12),
+            searchField.topAnchor.constraint(equalTo: effectView.topAnchor, constant: 8),
+            searchField.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 10),
+            searchField.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -10),
+            searchField.heightAnchor.constraint(equalToConstant: 26),
 
-            topDivider.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
-            topDivider.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 8),
-            topDivider.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -8),
-
-            searchField.topAnchor.constraint(equalTo: topDivider.bottomAnchor, constant: 8),
-            searchField.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 12),
-            searchField.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -12),
-            searchField.heightAnchor.constraint(equalToConstant: 28),
-
-            scrollTopWithHeaderConstraint!,
-            scrollView.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 8),
-            scrollView.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -8),
-            scrollView.bottomAnchor.constraint(equalTo: effectView.bottomAnchor, constant: -8)
+            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 6),
+            scrollView.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 6),
+            scrollView.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -6),
+            scrollView.bottomAnchor.constraint(equalTo: effectView.bottomAnchor, constant: -6)
         ])
     }
 
@@ -247,19 +216,6 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     @objc private func searchChanged() {
         searchKeyword = searchField.stringValue
         resetAndLoad()
-    }
-
-    private func handleKeyDown(_ event: NSEvent) {
-        // Number keys 1-9 for quick paste
-        if event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty {
-            let chars = event.charactersIgnoringModifiers ?? ""
-            if let num = Int(chars), num >= 1, num <= 9, num <= items.count {
-                let index = num - 1
-                let item = items[index]
-                copyItem(item)
-                tableView.deselectRow(index)
-            }
-        }
     }
 
     @objc private func scrollChanged() {
@@ -311,70 +267,68 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         guard row < items.count else { return nil }
         let item = items[row]
 
-        let id = NSUserInterfaceItemIdentifier("row")
+        let cellId = NSUserInterfaceItemIdentifier("historyCell")
         let cell: NSTableCellView
-        if let reused = tableView.makeView(withIdentifier: id, owner: self) as? NSTableCellView {
+        if let reused = tableView.makeView(withIdentifier: cellId, owner: self) as? NSTableCellView {
             cell = reused
         } else {
             cell = NSTableCellView()
-            cell.identifier = id
+            cell.identifier = cellId
 
             let icon = NSImageView()
-            icon.identifier = NSUserInterfaceItemIdentifier("icon")
+            icon.tag = 100
             icon.imageScaling = .scaleProportionallyUpOrDown
             icon.translatesAutoresizingMaskIntoConstraints = false
             icon.wantsLayer = true
             icon.layer?.cornerRadius = 3
             icon.layer?.masksToBounds = true
+            cell.addSubview(icon)
 
             let label = NSTextField(labelWithString: "")
-            label.identifier = NSUserInterfaceItemIdentifier("label")
-            label.font = NSFont.systemFont(ofSize: 14, weight: .medium)
+            label.tag = 101
+            label.font = NSFont.systemFont(ofSize: 13, weight: .regular)
             label.lineBreakMode = .byTruncatingTail
             label.translatesAutoresizingMaskIntoConstraints = false
+            cell.addSubview(label)
 
             let timeLabel = NSTextField(labelWithString: "")
-            timeLabel.identifier = NSUserInterfaceItemIdentifier("timeLabel")
-            timeLabel.font = NSFont.systemFont(ofSize: 11)
-            timeLabel.textColor = .secondaryLabelColor
+            timeLabel.tag = 102
+            timeLabel.font = NSFont.systemFont(ofSize: 10)
+            timeLabel.textColor = .tertiaryLabelColor
             timeLabel.alignment = .right
             timeLabel.translatesAutoresizingMaskIntoConstraints = false
-
-            cell.addSubview(icon)
-            cell.addSubview(label)
             cell.addSubview(timeLabel)
 
             NSLayoutConstraint.activate([
                 icon.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
                 icon.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                icon.widthAnchor.constraint(equalToConstant: 18),
-                icon.heightAnchor.constraint(equalToConstant: 18),
+                icon.widthAnchor.constraint(equalToConstant: 16),
+                icon.heightAnchor.constraint(equalToConstant: 16),
 
-                label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8),
-                label.trailingAnchor.constraint(equalTo: timeLabel.leadingAnchor, constant: -8),
+                label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 6),
+                label.trailingAnchor.constraint(equalTo: timeLabel.leadingAnchor, constant: -4),
                 label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
 
                 timeLabel.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
                 timeLabel.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                timeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 50)
+                timeLabel.widthAnchor.constraint(equalToConstant: 55)
             ])
         }
 
-        let icon = cell.subviews.first(where: { $0.identifier?.rawValue == "icon" }) as? NSImageView
-        let label = cell.subviews.first(where: { $0.identifier?.rawValue == "label" }) as? NSTextField
-        let timeLabel = cell.subviews.first(where: { $0.identifier?.rawValue == "timeLabel" }) as? NSTextField
+        let icon = cell.viewWithTag(100) as? NSImageView
+        let label = cell.viewWithTag(101) as? NSTextField
+        let timeLabel = cell.viewWithTag(102) as? NSTextField
+
         label?.textColor = row == hoveredRow ? .selectedMenuItemTextColor : .labelColor
         timeLabel?.stringValue = I18N.relativeTime(from: item.date)
-        timeLabel?.textColor = row == hoveredRow ? .selectedMenuItemTextColor : .secondaryLabelColor
+        timeLabel?.textColor = row == hoveredRow ? .selectedMenuItemTextColor : .tertiaryLabelColor
 
         if let text = item.text, !text.isEmpty {
-            let prefix = row < 9 ? "\(row + 1)  " : "   "
-            label?.stringValue = prefix + short(text)
+            label?.stringValue = short(text)
             icon?.image = nil
             icon?.isHidden = true
         } else {
-            let prefix = row < 9 ? "\(row + 1)  " : "   "
-            label?.stringValue = prefix + I18N.t("[图片]", "[Image]")
+            label?.stringValue = I18N.t("[图片]", "[Image]")
             icon?.image = thumbnail(for: item)
             icon?.isHidden = false
         }
@@ -384,7 +338,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
     private func short(_ text: String) -> String {
         let line = text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        let n = 50
+        let n = 42
         guard line.count > n else { return line }
         let idx = line.index(line.startIndex, offsetBy: n)
         return String(line[..<idx]) + "…"
@@ -396,7 +350,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             return cached
         }
         guard let image = ClipboardStore.shared.image(for: item.id) else { return nil }
-        let size = NSSize(width: 18, height: 18)
+        let size = NSSize(width: 16, height: 16)
         let thumb = NSImage(size: size)
         thumb.lockFocus()
         NSGraphicsContext.current?.imageInterpolation = .high
@@ -411,7 +365,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         guard row >= 0, row < items.count else { return }
         let item = items[row]
         copyItem(item)
-        tableView.deselectRow(row)
+        tableView.deselectAll(nil)
         hidePreview()
         closeContainingMenu()
     }
@@ -429,14 +383,10 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         HUDWindow.show(I18N.t("已复制", "Copied"))
     }
 
-    private func createContextMenu() -> NSMenu {
-        let menu = NSMenu()
-        menu.delegate = self
-        return menu
-    }
+    // MARK: - Context Menu
 
     func menuNeedsUpdate(_ menu: NSMenu) {
-        let row = tableView.clickedRow
+        let row = tableView.selectedRow
         guard row >= 0, row < items.count else {
             menu.removeAllItems()
             return
@@ -484,6 +434,8 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         resetAndLoad()
     }
 
+    // MARK: - Hover & Preview
+
     private func handleHover(_ row: Int?) {
         let previous = hoveredRow
         hoveredRow = row
@@ -511,7 +463,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     private func setRowTextColor(_ row: Int, isHovering: Bool) {
         guard row >= 0,
               let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView,
-              let label = cell.subviews.first(where: { $0.identifier?.rawValue == "label" }) as? NSTextField else { return }
+              let label = cell.viewWithTag(101) as? NSTextField else { return }
         label.textColor = isHovering ? .selectedMenuItemTextColor : .labelColor
     }
 
