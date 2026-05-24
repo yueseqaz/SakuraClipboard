@@ -324,18 +324,19 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         // Setup preview button
         previewBtn?.target = self
         previewBtn?.action = #selector(previewButtonClicked(_:))
-        previewBtn?.tag = row
+        previewBtn?.identifier = NSUserInterfaceItemIdentifier("\(row)")
 
-        if let text = item.text, !text.isEmpty {
-            label?.stringValue = short(text)
+        let isText = item.kind == .text && item.text != nil && !item.text!.isEmpty
+        previewBtn?.isHidden = !isText
+
+        if isText {
+            label?.stringValue = short(item.text!)
             icon?.image = nil
             icon?.isHidden = true
-            previewBtn?.isHidden = false
         } else {
             label?.stringValue = I18N.t("[图片]", "[Image]")
             icon?.image = thumbnail(for: item)
             icon?.isHidden = false
-            previewBtn?.isHidden = true
         }
 
         return cell
@@ -453,13 +454,11 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     }
 
     @objc private func previewButtonClicked(_ sender: NSButton) {
-        let row = sender.tag
+        guard let rowStr = sender.identifier?.rawValue, let row = Int(rowStr) else { return }
         guard row >= 0, row < items.count else { return }
         let item = items[row]
         if item.kind == .text, let text = item.text {
             showTextPreview(text)
-        } else if item.kind == .image {
-            showPreview(for: item)
         }
     }
 
@@ -499,6 +498,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     private func showPreview(for item: ClipboardItem) {
         let key = item.id as NSString
         if let cached = previewImageCache.object(forKey: key) {
+            hidePreview()
             showPreview(cached)
             return
         }
