@@ -1,0 +1,40 @@
+graph TD
+    subgraph Entry["入口层"]
+        Main["main.swift<br/>应用启动入口"]
+    end
+
+    subgraph Core["核心层"]
+        AppDelegate["AppDelegate.swift<br/>应用生命周期<br/>菜单栏管理"]
+        ClipboardMonitor["ClipboardMonitor.swift<br/>剪贴板监听<br/>轮询检测"]
+        ClipboardStore["ClipboardStore.swift<br/>SQLite 存储<br/>数据持久化"]
+    end
+
+    subgraph Model["数据层"]
+        ClipboardItem["ClipboardItem.swift<br/>数据模型<br/>文本/图片"]
+    end
+
+    subgraph UI["界面层"]
+        HistoryList["HistoryListPopoverController.swift<br/>历史列表 UI"]
+        SearchPanel["SearchPanel.swift<br/>搜索面板 UI"]
+        HUDWindow["HUDWindow.swift<br/>复制提示 HUD"]
+    end
+
+    subgraph Support["支撑层"]
+        Keyboard["KeyboardShortcut.swift<br/>全局热键"]
+        Localization["Localization.swift<br/>中英文国际化"]
+    end
+
+    Main --> AppDelegate
+    AppDelegate --> ClipboardMonitor
+    AppDelegate --> HistoryList
+    AppDelegate --> SearchPanel
+    AppDelegate --> Keyboard
+    ClipboardMonitor --> ClipboardStore
+    ClipboardStore --> ClipboardItem
+    HistoryList --> ClipboardStore
+    SearchPanel --> ClipboardStore
+    HistoryList --> HUDWindow
+    SearchPanel --> HUDWindow
+    AppDelegate -.->|使用| Localization
+    HistoryList -.->|使用| Localization
+    SearchPanel -.->|使用| Localization

@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1223.434 470.65" width="1223.434" height="470.65" style="--bg:#1a1b26;--fg:#a9b1d6;--line:#3d59a1;--accent:#7aa2f7;--muted:#565f89;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<g class="subgraph" data-id="User" data-label="用户操作">
+  <rect x="40" y="86.17500000000001" width="148.05" height="226.70000000000002" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="40" y="86.17500000000001" width="148.05" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="52" y="100.17500000000001" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">用户操作</text>
+</g>
+<g class="subgraph" data-id="Detection" data-label="检测层">
+  <rect x="468.4449999999999" y="40" width="176.949" height="113.80000000000001" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="468.4449999999999" y="40" width="176.949" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="480.4449999999999" y="54" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">检测层</text>
+</g>
+<g class="subgraph" data-id="Storage" data-label="存储层">
+  <rect x="827.55" y="178.575" width="329.884" height="130.575" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="827.55" y="178.575" width="329.884" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="839.55" y="192.575" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">存储层</text>
+</g>
+<g class="subgraph" data-id="Display" data-label="展示层">
+  <rect x="365.1" y="181.8" width="297.28" height="219.70000000000002" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="365.1" y="181.8" width="297.28" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="377.1" y="195.8" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">展示层</text>
+</g>
+<polyline class="edge" data-from="Copy" data-to="Monitor" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="系统剪贴板" points="172.05,148.625 333.39499999999987,148.625 333.39499999999987,110.89999999999999 484.4449999999999,110.9" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="Monitor" data-to="Store" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="changeCount 变化" points="629.3939999999999,110.9 809.55,110.89999999999999 809.55,236.02499999999998 843.55,236.025" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="HotKey" data-to="History" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Cmd+Shift+C" points="157.23000000000002,272.27500000000003 230.05,272.27500000000003 230.05,270.77500000000003 347.1,270.77500000000003 347.1,272.70000000000005 509.15000000000003,272.70000000000005 509.15000000000003,264.625 545.1500000000001,264.625" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="HotKey" data-to="Search" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Cmd+Shift+F" points="157.23000000000002,284.57500000000005 230.05,284.57500000000005 230.05,304.075 347.1,304.075 347.1,302.15000000000003 384.80500000000006,302.15000000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="MenuClick" data-to="Menu" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="186.87,213.52500000000003 347.1,213.52500000000003 347.1,230.60000000000002 347.1,230.60000000000002 347.1,244.25 384.80500000000006,244.25" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="History" data-to="Store" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="选择项目" points="646.38,258.475 809.55,258.475 809.55,249.475 843.55,249.47500000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="Search" data-to="Store" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="选择项目" points="486.035,302.15000000000003 704.38,302.15000000000003 704.38,296.9625 809.55,296.9625 809.55,262.925 843.55,262.925" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="Store" data-to="HUD" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="复制到剪贴板" points="975.9019999999999,240.50833333333333 987.9019999999999,240.50833333333333 987.9019999999999,231.25 1175.434,231.25 1175.434,411.5 347.1,411.5 347.1,367.05 384.80500000000006,367.05000000000007" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="Store" data-to="DB" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="975.9019999999999,258.44166666666666 987.9019999999999,258.44166666666666 987.9019999999999,267.7 1023.9019999999999,267.7" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="Menu" data-to="History" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="500.8550000000001,244.25 509.15000000000003,244.25 509.15000000000003,252.32500000000002 545.1500000000001,252.32500000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="Copy" data-to="Monitor" data-label="系统剪贴板">
+  <rect x="341.39499999999987" y="94.89999999999999" width="77.05000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="379.91999999999985" y="110.05" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">系统剪贴板</text>
+</g>
+<g class="edge-label" data-from="Monitor" data-to="Store" data-label="changeCount 变化">
+  <rect x="695.3939999999999" y="94.89999999999999" width="106.15600000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="748.4719999999999" y="110.05" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">changeCount 变化</text>
+</g>
+<g class="edge-label" data-from="HotKey" data-to="History" data-label="Cmd+Shift+C">
+  <rect x="238.05000000000004" y="254.775" width="77.05000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="276.57500000000005" y="269.925" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Cmd+Shift+C</text>
+</g>
+<g class="edge-label" data-from="HotKey" data-to="Search" data-label="Cmd+Shift+F">
+  <rect x="238.05000000000004" y="288.075" width="77.05000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="276.57500000000005" y="303.22499999999997" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Cmd+Shift+F</text>
+</g>
+<g class="edge-label" data-from="History" data-to="Store" data-label="选择项目">
+  <rect x="712.38" y="242.475" width="65.17" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="744.965" y="257.625" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">选择项目</text>
+</g>
+<g class="edge-label" data-from="Search" data-to="Store" data-label="选择项目">
+  <rect x="712.38" y="280.9625" width="65.17" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="744.965" y="296.11249999999995" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">选择项目</text>
+</g>
+<g class="edge-label" data-from="Store" data-to="HUD" data-label="复制到剪贴板">
+  <rect x="1078.504" y="395.5" width="88.93" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1122.9689999999998" y="410.65" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">复制到剪贴板</text>
+</g>
+<g class="node" data-id="Copy" data-label="复制内容" data-shape="rectangle">
+  <rect x="70.82000000000001" y="130.175" width="101.22999999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="121.435" y="148.625" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">复制内容</text>
+</g>
+<g class="node" data-id="HotKey" data-label="快捷键" data-shape="rectangle">
+  <rect x="70.82" y="259.975" width="86.41" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="114.02499999999999" y="278.425" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">快捷键</text>
+</g>
+<g class="node" data-id="MenuClick" data-label="菜单栏点击" data-shape="rectangle">
+  <rect x="70.82" y="195.07500000000002" width="116.05" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="128.845" y="213.52500000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">菜单栏点击</text>
+</g>
+<g class="node" data-id="Monitor" data-label="ClipboardMonitor
+轮询检测" data-shape="rectangle">
+  <rect x="484.4449999999999" y="84" width="144.949" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="556.9194999999999" y="110.9" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="556.9194999999999" dy="-3.9000000000000012">ClipboardMonitor</tspan><tspan x="556.9194999999999" dy="16.900000000000002">轮询检测</tspan></text>
+</g>
+<g class="node" data-id="Store" data-label="ClipboardStore
+SQLite" data-shape="rectangle">
+  <rect x="843.55" y="222.575" width="132.352" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="909.726" y="249.475" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="909.726" dy="-3.9000000000000012">ClipboardStore</tspan><tspan x="909.726" dy="16.900000000000002">SQLite</tspan></text>
+</g>
+<g class="node" data-id="DB" data-label="history.sqlite" data-shape="cylinder">
+  <rect x="1023.9019999999999" y="249.25" width="117.53200000000001" height="36.900000000000006" fill="var(--_node-fill)" stroke="none" />
+  <line x1="1023.9019999999999" y1="249.25" x2="1023.9019999999999" y2="286.15" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <line x1="1141.434" y1="249.25" x2="1141.434" y2="286.15" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <ellipse cx="1082.668" cy="286.15" rx="58.766000000000005" ry="7" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <ellipse cx="1082.668" cy="249.25" rx="58.766000000000005" ry="7" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1082.668" y="267.7" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">history.sqlite</text>
+</g>
+<g class="node" data-id="Menu" data-label="菜单栏弹出" data-shape="rectangle">
+  <rect x="384.80500000000006" y="225.8" width="116.05" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="442.83000000000004" y="244.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">菜单栏弹出</text>
+</g>
+<g class="node" data-id="History" data-label="历史列表" data-shape="rectangle">
+  <rect x="545.1500000000001" y="240.025" width="101.22999999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="595.7650000000001" y="258.475" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">历史列表</text>
+</g>
+<g class="node" data-id="Search" data-label="搜索面板" data-shape="rectangle">
+  <rect x="384.80500000000006" y="283.70000000000005" width="101.22999999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="435.4200000000001" y="302.15000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">搜索面板</text>
+</g>
+<g class="node" data-id="HUD" data-label="复制提示" data-shape="rectangle">
+  <rect x="384.80500000000006" y="348.6" width="101.22999999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="435.4200000000001" y="367.05" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">复制提示</text>
+</g>
+</svg>

@@ -1,0 +1,33 @@
+graph LR
+    subgraph User["用户操作"]
+        Copy["复制内容"]
+        HotKey["快捷键"]
+        MenuClick["菜单栏点击"]
+    end
+
+    subgraph Detection["检测层"]
+        Monitor["ClipboardMonitor<br/>轮询检测"]
+    end
+
+    subgraph Storage["存储层"]
+        Store["ClipboardStore<br/>SQLite"]
+        DB[("history.sqlite")]
+    end
+
+    subgraph Display["展示层"]
+        Menu["菜单栏弹出"]
+        History["历史列表"]
+        Search["搜索面板"]
+        HUD["复制提示"]
+    end
+
+    Copy -->|系统剪贴板| Monitor
+    Monitor -->|changeCount 变化| Store
+    Store --> DB
+    HotKey -->|Cmd+Shift+C| History
+    HotKey -->|Cmd+Shift+F| Search
+    MenuClick --> Menu
+    Menu --> History
+    History -->|选择项目| Store
+    Search -->|选择项目| Store
+    Store -->|复制到剪贴板| HUD

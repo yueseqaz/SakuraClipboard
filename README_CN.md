@@ -58,6 +58,16 @@ Sources/
 └── main.swift                  # 入口
 ```
 
+## 项目架构
+
+### 分层架构图
+
+![Architecture](docs/diagrams/architecture.svg)
+
+### 数据流图
+
+![Data Flow](docs/diagrams/dataflow.svg)
+
 ## 许可证
 
 MIT

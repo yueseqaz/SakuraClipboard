@@ -58,6 +58,16 @@ Sources/
 └── main.swift                  # Entry point
 ```
 
+## Architecture
+
+### Layer Diagram
+
+![Architecture](docs/diagrams/architecture.svg)
+
+### Data Flow
+
+![Data Flow](docs/diagrams/dataflow.svg)
+
 ## License
 
 MIT
