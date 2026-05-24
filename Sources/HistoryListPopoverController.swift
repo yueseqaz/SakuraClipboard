@@ -112,6 +112,22 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         )
     }
 
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 49 { // Space bar
+            let row = tableView.selectedRow
+            if row >= 0, row < items.count {
+                let item = items[row]
+                if item.kind == .text, let text = item.text, text.count > 42 {
+                    showTextPreview(text)
+                }
+            }
+        } else if event.keyCode == 53 { // ESC
+            hidePreview()
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
     override func viewDidDisappear() {
         super.viewDidDisappear()
         destroyPreviewPanel()
@@ -441,9 +457,6 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             setRowTextColor(row, isHovering: true)
         }
 
-        // Cancel text preview delay
-        textPreviewWorkItem?.cancel()
-
         guard let row, row >= 0, row < items.count else {
             hidePreview()
             return
@@ -451,13 +464,6 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         let item = items[row]
         if item.kind == .image {
             showPreview(for: item)
-        } else if item.kind == .text, let text = item.text, text.count > 42 {
-            // Delay text preview by 0.5s
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.showTextPreview(text)
-            }
-            textPreviewWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
         } else {
             hidePreview()
         }
