@@ -86,7 +86,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
     private let tableView = HoverHistoryTableView()
     private let scrollView = NSScrollView()
-    private let searchField = NSSearchField()
+    private let searchField = NSTextField()
     private var searchKeyword = ""
     private let effectView = NSVisualEffectView()
 
@@ -147,11 +147,12 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
         searchField.placeholderString = I18N.t("搜索...", "Search...")
         searchField.font = NSFont.systemFont(ofSize: 13)
+        searchField.bezelStyle = .roundedBezel
         searchField.translatesAutoresizingMaskIntoConstraints = false
         searchField.target = self
         searchField.action = #selector(searchChanged)
-        searchField.sendsSearchStringImmediately = false
-        searchField.sendsWholeSearchString = true
+        searchField.wantsLayer = true
+        searchField.layer?.cornerRadius = 4
         effectView.addSubview(searchField)
 
         scrollView.drawsBackground = false
