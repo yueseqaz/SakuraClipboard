@@ -1,4 +1,5 @@
 import Cocoa
+import Carbon.HIToolbox
 import ServiceManagement
 
 // MARK: - App Delegate
@@ -24,6 +25,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         monitor.start()
+
+        KeyboardShortcut.shared.register(key: kVK_ANSI_C, modifiers: [.command, .shift]) { [weak self] in
+            self?.showFromKeyboard()
+        }
+    }
+
+    @objc private func showFromKeyboard() {
+        guard let btn = statusItem.button else { return }
+        showNativeMenu(relativeTo: btn)
     }
 
     @objc func toggle() {

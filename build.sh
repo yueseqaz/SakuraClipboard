@@ -68,7 +68,7 @@ SWIFT
 
 echo "🔨 编译..."
 mkdir -p "$BUILD_DIR"
-swiftc -O -framework Cocoa -framework ServiceManagement -lsqlite3 Sources/*.swift -o "$BUILD_DIR/$APP_NAME"
+swiftc -O -framework Cocoa -framework ServiceManagement -framework Carbon -lsqlite3 Sources/*.swift -o "$BUILD_DIR/$APP_NAME"
 
 echo "📦 打包..."
 rm -rf "$APP_BUNDLE"
