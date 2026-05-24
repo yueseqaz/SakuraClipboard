@@ -295,14 +295,13 @@ final class SearchPanel {
 
         let newPanel = NSPanel(
             contentRect: NSRect(x: x, y: y, width: width, height: height),
-            styleMask: [.titled, .closable, .nonactivatingPanel],
+            styleMask: [.titled, .closable, .utilityWindow],
             backing: .buffered,
             defer: false
         )
 
         newPanel.title = I18N.t("搜索剪贴板", "Search Clipboard")
         newPanel.isFloatingPanel = true
-        newPanel.becomesKeyOnlyIfNeeded = true
         newPanel.level = .floating
         newPanel.isReleasedWhenClosed = false
         newPanel.collectionBehavior = [.canJoinAllSpaces, .transient]
