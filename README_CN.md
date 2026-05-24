@@ -2,7 +2,7 @@
 
 轻量级 macOS 菜单栏剪贴板历史工具。从系统菜单栏快速访问文本和图片记录。
 
-[![Build](https://github.com/YOUR_USERNAME/SakuraClipboard/actions/workflows/build.yml/badge.svg)](https://github.com/YOUR_USERNAME/SakuraClipboard/actions/workflows/build.yml)
+[![Build](https://github.com/yueseqaz/SakuraClipboard/actions/workflows/build.yml/badge.svg)](https://github.com/yueseqaz/SakuraClipboard/actions/workflows/build.yml)
 
 ## 功能特性
 
@@ -19,7 +19,7 @@
 
 ## 下载
 
-从 [Releases](https://github.com/YOUR_USERNAME/SakuraClipboard/releases) 下载最新 DMG：
+从 [Releases](https://github.com/yueseqaz/SakuraClipboard/releases) 下载最新 DMG：
 
 - `SakuraClipboard-arm64.dmg` — Apple Silicon (M1/M2/M3)
 - `SakuraClipboard-x86_64.dmg` — Intel

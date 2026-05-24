@@ -2,7 +2,7 @@
 
 A lightweight macOS menu bar clipboard history app. Keep your text and image clips accessible from the system menu bar.
 
-[![Build](https://github.com/YOUR_USERNAME/SakuraClipboard/actions/workflows/build.yml/badge.svg)](https://github.com/YOUR_USERNAME/SakuraClipboard/actions/workflows/build.yml)
+[![Build](https://github.com/yueseqaz/SakuraClipboard/actions/workflows/build.yml/badge.svg)](https://github.com/yueseqaz/SakuraClipboard/actions/workflows/build.yml)
 
 ## Features
 
@@ -19,7 +19,7 @@ A lightweight macOS menu bar clipboard history app. Keep your text and image cli
 
 ## Download
 
-Download the latest DMG from [Releases](https://github.com/YOUR_USERNAME/SakuraClipboard/releases):
+Download the latest DMG from [Releases](https://github.com/yueseqaz/SakuraClipboard/releases):
 
 - `SakuraClipboard-arm64.dmg` — Apple Silicon (M1/M2/M3)
 - `SakuraClipboard-x86_64.dmg` — Intel
