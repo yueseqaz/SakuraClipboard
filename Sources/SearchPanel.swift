@@ -7,14 +7,15 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
     private var isLoading = false
     private var hasMore = true
 
-    private let searchField = NSTextField()
+    private let searchField = NSSearchField()
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
     private let effectView = NSVisualEffectView()
+    private let hintLabel = NSTextField(labelWithString: "")
     private let thumbnailCache = NSCache<NSString, NSImage>()
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 500))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 520))
     }
 
     override func viewDidLoad() {
@@ -40,14 +41,18 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
         effectView.layer?.masksToBounds = true
         view.addSubview(effectView)
 
-        searchField.placeholderString = I18N.t("搜索剪贴板历史...", "Search clipboard history...")
-        searchField.font = NSFont.systemFont(ofSize: 15)
-        searchField.bezelStyle = .roundedBezel
+        searchField.placeholderString = I18N.t("输入关键词搜索剪贴板历史...", "Type to search clipboard history...")
+        searchField.font = NSFont.systemFont(ofSize: 14)
         searchField.translatesAutoresizingMaskIntoConstraints = false
         searchField.delegate = self
-        searchField.target = self
-        searchField.action = #selector(searchChanged)
+        searchField.sendsSearchStringImmediately = true
         effectView.addSubview(searchField)
+
+        hintLabel.stringValue = I18N.t("按 ESC 关闭", "Press ESC to close")
+        hintLabel.font = NSFont.systemFont(ofSize: 10)
+        hintLabel.textColor = .tertiaryLabelColor
+        hintLabel.translatesAutoresizingMaskIntoConstraints = false
+        effectView.addSubview(hintLabel)
 
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
@@ -55,7 +60,7 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
         tableView.headerView = nil
-        tableView.rowHeight = 32
+        tableView.rowHeight = 36
         tableView.intercellSpacing = NSSize(width: 0, height: 1)
         tableView.backgroundColor = .clear
         tableView.selectionHighlightStyle = .none
@@ -65,7 +70,7 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
         tableView.action = #selector(copySelected)
 
         let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("main"))
-        col.width = 360
+        col.resizingMask = .autoresizingMask
         tableView.addTableColumn(col)
 
         scrollView.documentView = tableView
@@ -82,19 +87,29 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
             searchField.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -16),
             searchField.heightAnchor.constraint(equalToConstant: 32),
 
-            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 12),
-            scrollView.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 12),
-            scrollView.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -12),
-            scrollView.bottomAnchor.constraint(equalTo: effectView.bottomAnchor, constant: -12)
+            hintLabel.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 4),
+            hintLabel.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -16),
+
+            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 8),
+            scrollView.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 8),
+            scrollView.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -8),
+            scrollView.bottomAnchor.constraint(equalTo: effectView.bottomAnchor, constant: -8)
         ])
     }
 
-    @objc private func searchChanged() {
-        performSearch()
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        // Update table column width to match scroll view
+        let column = tableView.tableColumns.first
+        column?.width = scrollView.contentView.bounds.width
     }
 
     func controlTextDidChange(_ obj: Notification) {
         performSearch()
+    }
+
+    func searchFieldDidEndSearching(_ sender: NSSearchField) {
+        // Keep results visible
     }
 
     private func performSearch() {
@@ -129,6 +144,11 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
 
     func numberOfRows(in tableView: NSTableView) -> Int { items.count }
 
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let rowView = NSTableRowView()
+        return rowView
+    }
+
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard row < items.count else { return nil }
         let item = items[row]
@@ -141,39 +161,65 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
             cell = NSTableCellView()
             cell.identifier = cellId
 
+            let container = NSView()
+            container.translatesAutoresizingMaskIntoConstraints = false
+            cell.addSubview(container)
+
             let icon = NSImageView()
-            icon.tag = 200
-            icon.imageScaling = .scaleProportionallyUpOrDown
             icon.translatesAutoresizingMaskIntoConstraints = false
+            icon.imageScaling = .scaleProportionallyDown
             icon.wantsLayer = true
-            icon.layer?.cornerRadius = 3
+            icon.layer?.cornerRadius = 4
             icon.layer?.masksToBounds = true
-            cell.addSubview(icon)
+            container.addSubview(icon)
 
             let label = NSTextField(labelWithString: "")
-            label.tag = 201
             label.font = NSFont.systemFont(ofSize: 13)
             label.lineBreakMode = .byTruncatingTail
             label.translatesAutoresizingMaskIntoConstraints = false
-            cell.addSubview(label)
+            container.addSubview(label)
+
+            let timeLabel = NSTextField(labelWithString: "")
+            timeLabel.font = NSFont.systemFont(ofSize: 10)
+            timeLabel.textColor = .tertiaryLabelColor
+            timeLabel.alignment = .right
+            timeLabel.translatesAutoresizingMaskIntoConstraints = false
+            cell.addSubview(timeLabel)
 
             NSLayoutConstraint.activate([
-                icon.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 6),
-                icon.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                container.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
+                container.trailingAnchor.constraint(equalTo: timeLabel.leadingAnchor, constant: -8),
+                container.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                container.heightAnchor.constraint(equalToConstant: 28),
+
+                icon.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                icon.centerYAnchor.constraint(equalTo: container.centerYAnchor),
                 icon.widthAnchor.constraint(equalToConstant: 20),
                 icon.heightAnchor.constraint(equalToConstant: 20),
 
                 label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8),
-                label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
-                label.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
+                label.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                label.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+
+                timeLabel.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
+                timeLabel.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                timeLabel.widthAnchor.constraint(equalToConstant: 60)
             ])
         }
 
-        let icon = cell.viewWithTag(200) as? NSImageView
-        let label = cell.viewWithTag(201) as? NSTextField
+        // Find subviews
+        let container = cell.subviews.first
+        let icon = container?.subviews.first(where: { $0 is NSImageView }) as? NSImageView
+        let label = container?.subviews.first(where: { $0 is NSTextField }) as? NSTextField
+        let timeLabel = cell.subviews.first(where: {
+            ($0 as? NSTextField)?.alignment == .right
+        }) as? NSTextField
+
+        // Configure
+        timeLabel?.stringValue = I18N.relativeTime(from: item.date)
 
         if let text = item.text, !text.isEmpty {
-            label?.stringValue = text
+            label?.stringValue = String(text.prefix(60))
             icon?.image = nil
             icon?.isHidden = true
         } else {
@@ -216,10 +262,6 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
             pb.writeObjects([image])
         }
         HUDWindow.show(I18N.t("已复制", "Copied"))
-        closePanel()
-    }
-
-    private func closePanel() {
         view.window?.close()
     }
 }
@@ -240,8 +282,8 @@ final class SearchPanel {
             return
         }
 
-        let width: CGFloat = 400
-        let height: CGFloat = 500
+        let width: CGFloat = 420
+        let height: CGFloat = 520
 
         let screenFrame = NSScreen.main?.visibleFrame ?? .zero
         let x = screenFrame.midX - width / 2
