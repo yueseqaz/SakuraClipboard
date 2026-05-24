@@ -339,7 +339,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
     private func short(_ text: String) -> String {
         let line = text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        let n = 18
+        let n = 50
         guard line.count > n else { return line }
         let idx = line.index(line.startIndex, offsetBy: n)
         return String(line[..<idx]) + "…"
