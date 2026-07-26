@@ -2,8 +2,8 @@
 set -e
 
 APP_NAME="SakuraClipboard"
-APP_VERSION="1.0.1"
-APP_BUILD="101"
+APP_VERSION="1.0.3"
+APP_BUILD="103"
 BUILD_DIR="build"
 APP_BUNDLE="$APP_NAME.app"
 DMG_NAME="$APP_NAME.dmg"

@@ -139,7 +139,16 @@ class ClipboardStore {
     func clear() {
         dbLock.lock()
         defer { dbLock.unlock() }
-        execute("DELETE FROM clipboard_items;")
+        // 物理清零：关闭连接 → 删除数据库文件 + WAL + SHM → 重新建库。
+        // 比 DELETE+VACUUM 更彻底可靠：VACUUM 在 WAL 模式下可能因
+        // 锁/事务状态失败，且重建整个文件较慢。直接删文件是最快的清零方式。
+        closeDatabase()
+        let basePath = storeURL.path
+        for suffix in ["", "-wal", "-shm"] {
+            try? fileManager.removeItem(atPath: basePath + suffix)
+        }
+        openDatabase()
+        createTablesIfNeeded()
         loadAll()
         notifyClipboardUpdated()
     }
@@ -215,11 +224,23 @@ class ClipboardStore {
     func storageUsageDescription() -> String {
         dbLock.lock()
         defer { dbLock.unlock() }
-        guard let attrs = try? fileManager.attributesOfItem(atPath: storeURL.path),
-              let bytes = attrs[.size] as? Int64 else {
-            return "0 B"
+        return ByteCountFormatter.string(fromByteCount: totalStorageBytes(), countStyle: .file)
+    }
+
+    /// 统计数据库主文件 + WAL + SHM 的总占用。
+    /// WAL 模式下 -wal 文件可能不小，只算主文件会低估真实占用。
+    private func totalStorageBytes() -> Int64 {
+        let basePath = storeURL.path
+        let suffixes = ["", "-wal", "-shm"]
+        var total: Int64 = 0
+        for suffix in suffixes {
+            let path = basePath + suffix
+            if let attrs = try? fileManager.attributesOfItem(atPath: path),
+               let bytes = attrs[.size] as? Int64 {
+                total += bytes
+            }
         }
-        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        return total
     }
 
     func fullText(for id: String) -> String? {

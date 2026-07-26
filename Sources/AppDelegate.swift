@@ -8,6 +8,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let monitor = ClipboardMonitor()
 
     private var inlineHistoryControllers: [HistoryListPopoverController] = []
+    /// 当前展开菜单中的"占用"菜单项，用于清理后实时刷新标题。
+    private weak var currentStorageMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -25,6 +27,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         monitor.start()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleClipboardUpdated),
+            name: .clipboardUpdated,
+            object: nil
+        )
 
         KeyboardShortcut.shared.register(key: kVK_ANSI_C, modifiers: [.command, .shift]) { [weak self] in
             self?.showFromKeyboard()
@@ -128,6 +137,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuDidClose(_ menu: NSMenu) {
         inlineHistoryControllers.removeAll()
+        currentStorageMenuItem = nil
+    }
+
+    @objc private func handleClipboardUpdated() {
+        // notifyClipboardUpdated 已在主线程派发，这里直接刷新菜单标题。
+        currentStorageMenuItem?.title = I18N.t("占用：", "Storage: ") + ClipboardStore.shared.storageUsageDescription()
     }
 
     private func latestItemTitle() -> String {
@@ -164,6 +179,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         storageItem.target = self
         storageItem.toolTip = ClipboardStore.shared.storageLocationDescription()
         menu.addItem(storageItem)
+        // 保存引用，便于清理后实时刷新标题。
+        currentStorageMenuItem = storageItem
         menu.addItem(.separator())
 
         let options: [(String, Int?)] = [
@@ -355,6 +372,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func clearAll() {
+        let alert = NSAlert()
+        alert.messageText = I18N.t("清除所有历史记录", "Clear All History")
+        alert.informativeText = I18N.t(
+            "此操作将删除全部历史记录，且不可恢复。是否继续？",
+            "This will delete all history and cannot be undone. Continue?"
+        )
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: I18N.t("清除", "Clear"))
+        alert.addButton(withTitle: I18N.t("取消", "Cancel"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
         ClipboardStore.shared.clear()
     }
 

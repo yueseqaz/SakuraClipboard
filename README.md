@@ -24,6 +24,21 @@ Download the latest DMG from [Releases](https://github.com/yueseqaz/SakuraClipbo
 - `SakuraClipboard-arm64.dmg` — Apple Silicon (M1/M2/M3)
 - `SakuraClipboard-x86_64.dmg` — Intel
 
+## Homebrew
+
+Install via [Homebrew](https://brew.sh):
+
+```bash
+brew tap yueseqaz/sakura-clipboard https://github.com/yueseqaz/SakuraClipboard
+brew install --cask sakura-clipboard
+```
+
+To upgrade later:
+
+```bash
+brew upgrade --cask sakura-clipboard
+```
+
 ## Build from Source
 
 ```bash
