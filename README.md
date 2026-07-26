@@ -30,6 +30,7 @@ Install via [Homebrew](https://brew.sh):
 
 ```bash
 brew tap yueseqaz/sakura-clipboard https://github.com/yueseqaz/SakuraClipboard
+brew trust yueseqaz/sakura-clipboard
 brew install --cask sakura-clipboard
 ```
 

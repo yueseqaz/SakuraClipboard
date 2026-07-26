@@ -7,7 +7,7 @@ cask "sakura-clipboard" do
   desc "Lightweight macOS menu bar clipboard history app"
   homepage "https://github.com/yueseqaz/SakuraClipboard"
 
-  depends_on macos: ">= :big_sur"
+  depends_on macos: :big_sur
 
   app "SakuraClipboard.app"
 
