@@ -62,42 +62,43 @@ class ClipboardStore {
         return Self.retentionDayOptions.contains(raw) ? raw : nil
     }
 
-    private init() {
+    init(storeURL: URL? = nil) {
+        if let storeURL { self.storeURL = storeURL }
         openDatabase()
         createTablesIfNeeded()
         applyRetentionPolicyLocked()
         loadAll()
     }
 
-    func addText(_ text: String) {
+    func addText(_ text: String, sourceApp: ClipboardSource? = nil) {
         dbLock.lock()
         defer { dbLock.unlock() }
         let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return }
         let capped = String(cleaned.prefix(maxTextBytes))
         removeExistingText(capped)
-        let item = ClipboardItem(text: capped)
+        let item = ClipboardItem(text: capped, sourceApp: sourceApp)
         insert(item)
         finalizeChanges()
     }
 
-    func addImage(_ image: NSImage) {
+    func addImage(_ image: NSImage, sourceApp: ClipboardSource? = nil) {
         dbLock.lock()
         defer { dbLock.unlock() }
         guard let imageData = ClipboardItem.makeImageData(from: image) else { return }
-        addImageDataLocked(imageData)
+        addImageDataLocked(imageData, sourceApp: sourceApp)
     }
 
-    func addImageData(_ imageData: Data) {
+    func addImageData(_ imageData: Data, sourceApp: ClipboardSource? = nil) {
         dbLock.lock()
         defer { dbLock.unlock() }
-        addImageDataLocked(imageData)
+        addImageDataLocked(imageData, sourceApp: sourceApp)
     }
 
-    private func addImageDataLocked(_ imageData: Data) {
+    private func addImageDataLocked(_ imageData: Data, sourceApp: ClipboardSource?) {
         guard imageData.count <= maxImageBytes else { return }
         removeExistingImage(imageData)
-        let item = ClipboardItem(imageData: imageData)
+        let item = ClipboardItem(imageData: imageData, sourceApp: sourceApp)
         insert(item)
         finalizeChanges()
     }
@@ -319,7 +320,7 @@ class ClipboardStore {
     ) -> (sql: String, binders: [(OpaquePointer?, Int32) -> Void]) {
         let selectText = "substr(text, 1, \(Self.textPreviewFetchLimit)) AS text"
         var sql = selectClause ?? """
-        SELECT id, type, \(selectText), NULL AS image_data, created_at, is_favorite, length(text), favorite_folder
+        SELECT id, type, \(selectText), NULL AS image_data, created_at, is_favorite, length(text), favorite_folder, source_app_bundle_id, source_app_name
         """
         sql += " FROM clipboard_items WHERE 1 = 1"
         var bindings: [(OpaquePointer?, Int32) -> Void] = []
@@ -407,12 +408,19 @@ class ClipboardStore {
                 data_hash TEXT,
                 created_at REAL NOT NULL,
                 is_favorite INTEGER NOT NULL DEFAULT 0,
-                favorite_folder TEXT
+                favorite_folder TEXT,
+                source_app_bundle_id TEXT,
+                source_app_name TEXT
             );
             """
         )
         ensureFavoriteFolderColumn()
         ensureDataHashColumn()
+        for column in ["source_app_bundle_id", "source_app_name"] {
+            if !columnExists(table: "clipboard_items", column: column) {
+                execute("ALTER TABLE clipboard_items ADD COLUMN \(column) TEXT;")
+            }
+        }
         execute("CREATE INDEX IF NOT EXISTS idx_clipboard_created_at ON clipboard_items(created_at DESC);")
         execute("CREATE INDEX IF NOT EXISTS idx_clipboard_type ON clipboard_items(type);")
         execute("CREATE INDEX IF NOT EXISTS idx_clipboard_favorite_created ON clipboard_items(is_favorite DESC, created_at DESC);")
@@ -467,6 +475,8 @@ class ClipboardStore {
             rc = sqlite3_step(stmt)
             retries += 1
         }
+        // Setup PRAGMAs may return status rows before completing successfully.
+        while rc == SQLITE_ROW { rc = sqlite3_step(stmt) }
 
         if rc != SQLITE_DONE {
             if let msg = sqlite3_errmsg(db) {
@@ -479,8 +489,8 @@ class ClipboardStore {
     private func insert(_ item: ClipboardItem) {
         execute(
             """
-            INSERT INTO clipboard_items (id, type, text, image_data, data_hash, created_at, is_favorite, favorite_folder)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO clipboard_items (id, type, text, image_data, data_hash, created_at, is_favorite, favorite_folder, source_app_bundle_id, source_app_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             bind: { stmt in
                 sqlite3_bind_text(stmt, 1, item.id, -1, SQLITE_TRANSIENT)
@@ -508,6 +518,16 @@ class ClipboardStore {
                     sqlite3_bind_text(stmt, 8, folder, -1, SQLITE_TRANSIENT)
                 } else {
                     sqlite3_bind_null(stmt, 8)
+                }
+                if let bundleID = item.sourceApp?.bundleIdentifier {
+                    sqlite3_bind_text(stmt, 9, bundleID, -1, SQLITE_TRANSIENT)
+                } else {
+                    sqlite3_bind_null(stmt, 9)
+                }
+                if let name = item.sourceApp?.name {
+                    sqlite3_bind_text(stmt, 10, name, -1, SQLITE_TRANSIENT)
+                } else {
+                    sqlite3_bind_null(stmt, 10)
                 }
             }
         )
@@ -563,7 +583,7 @@ class ClipboardStore {
         let selectText = "substr(text, 1, \(Self.textPreviewFetchLimit)) AS text"
         items = fetch(
             sql: """
-            SELECT id, type, \(selectText), NULL AS image_data, created_at, is_favorite, length(text), favorite_folder
+            SELECT id, type, \(selectText), NULL AS image_data, created_at, is_favorite, length(text), favorite_folder, source_app_bundle_id, source_app_name
             FROM clipboard_items
             ORDER BY created_at DESC;
             """
@@ -600,6 +620,10 @@ class ClipboardStore {
             let isFavorite = sqlite3_column_int(stmt, 5) == 1
             let textLength = Int(sqlite3_column_int(stmt, 6))
             let favoriteFolder = sqlite3_column_text(stmt, 7).map { String(cString: $0) }
+            let sourceApp = ClipboardSource(
+                bundleIdentifier: sqlite3_column_text(stmt, 8).map { String(cString: $0) },
+                name: sqlite3_column_text(stmt, 9).map { String(cString: $0) }
+            )
 
             if typeRaw == ClipboardItem.Kind.text.rawValue, let text {
                 result.append(
@@ -610,7 +634,8 @@ class ClipboardStore {
                         isFavorite: isFavorite,
                         favoriteFolder: favoriteFolder,
                         textLength: textLength,
-                        hasMoreText: textLength > text.count
+                        hasMoreText: textLength > text.count,
+                        sourceApp: sourceApp
                     )
                 )
             } else if typeRaw == ClipboardItem.Kind.image.rawValue {
@@ -621,7 +646,8 @@ class ClipboardStore {
                             imageData: imageData,
                             date: Date(timeIntervalSince1970: createdAt),
                             isFavorite: isFavorite,
-                            favoriteFolder: favoriteFolder
+                            favoriteFolder: favoriteFolder,
+                            sourceApp: sourceApp
                         )
                     )
                 } else {
@@ -630,7 +656,8 @@ class ClipboardStore {
                             id: id,
                             imageDate: Date(timeIntervalSince1970: createdAt),
                             isFavorite: isFavorite,
-                            favoriteFolder: favoriteFolder
+                            favoriteFolder: favoriteFolder,
+                            sourceApp: sourceApp
                         )
                     )
                 }

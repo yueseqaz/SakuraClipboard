@@ -9,7 +9,8 @@ A lightweight macOS menu bar clipboard history app. Keep your text and image cli
 - **Clipboard History** — Automatically saves text and image clips
 - **Quick Access** — Opens from menu bar or `Cmd+Shift+C`
 - **Search** — `Cmd+Shift+F` opens search panel with Chinese input support
-- **Preview** — Hover text or images to preview; text also keeps its "预览" button
+- **Preview** — Hover text or images to preview, without per-record preview buttons
+- **Source Apps** — New clips show their source application's icon; older clips with no source information use a generic icon
 - **Interactive Previews** — Text and images appear in the history menu's built-in left column; read or scroll without opening or activating another window
 - **Favorites** — Right-click to favorite items
 - **Auto Cleanup** — Configurable retention (1-30 days or forever)

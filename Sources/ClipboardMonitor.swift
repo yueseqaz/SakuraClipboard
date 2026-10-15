@@ -48,21 +48,21 @@ class ClipboardMonitor {
 
         let observedChangeCount = changeCount
 
-        let frontBundleID: String? = {
-            guard let front = NSWorkspace.shared.frontmostApplication else { return nil }
-            return front.bundleIdentifier
-        }()
-        if let bid = frontBundleID, AppDelegate.ignoredAppBundleIDs().contains(bid) { return }
+        let front = NSWorkspace.shared.frontmostApplication
+        let fallback = ClipboardSource(bundleIdentifier: front?.bundleIdentifier, name: front?.localizedName)
+        let source = ClipboardSource.capture(from: pb, fallback: fallback)
+        if let bid = source?.bundleIdentifier, AppDelegate.ignoredAppBundleIDs().contains(bid) { return }
 
         ingestQueue.async {
             let pasteboard = NSPasteboard.general
             guard pasteboard.changeCount == observedChangeCount else { return }
             let imageData = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff)
             let text = pasteboard.string(forType: .string)
+            guard pasteboard.changeCount == observedChangeCount else { return }
             if let imageData {
-                ClipboardStore.shared.addImageData(imageData)
+                ClipboardStore.shared.addImageData(imageData, sourceApp: source)
             } else if let text {
-                ClipboardStore.shared.addText(text)
+                ClipboardStore.shared.addText(text, sourceApp: source)
             }
         }
     }

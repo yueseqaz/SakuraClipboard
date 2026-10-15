@@ -56,6 +56,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     private let textPreviewCache = NSCache<NSString, NSScrollView>()
     private let previewInteraction = HistoryPreviewInteraction()
     private let thumbnailCache = NSCache<NSString, NSImage>()
+    private let sourceIconProvider = ClipboardSourceIconProvider()
     private let previewImageCache = NSCache<NSString, NSImage>()
     private let previewLoadQueue: OperationQueue = {
         let queue = OperationQueue()
@@ -239,95 +240,18 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         let item = items[row]
 
         let cellId = NSUserInterfaceItemIdentifier("historyCell")
-        let cell: NSTableCellView
-        if let reused = tableView.makeView(withIdentifier: cellId, owner: self) as? NSTableCellView {
+        let cell: HistoryRecordCell
+        if let reused = tableView.makeView(withIdentifier: cellId, owner: self) as? HistoryRecordCell {
             cell = reused
         } else {
-            cell = NSTableCellView()
+            cell = HistoryRecordCell()
             cell.identifier = cellId
-
-            let icon = NSImageView()
-            icon.tag = 100
-            icon.imageScaling = .scaleProportionallyUpOrDown
-            icon.translatesAutoresizingMaskIntoConstraints = false
-            icon.wantsLayer = true
-            icon.layer?.cornerRadius = 3
-            icon.layer?.masksToBounds = true
-            cell.addSubview(icon)
-
-            let label = NSTextField(labelWithString: "")
-            label.tag = 101
-            label.font = NSFont.systemFont(ofSize: 13, weight: .regular)
-            label.maximumNumberOfLines = 1
-            label.lineBreakMode = .byTruncatingTail
-            label.translatesAutoresizingMaskIntoConstraints = false
-            cell.addSubview(label)
-
-            let timeLabel = NSTextField(labelWithString: "")
-            timeLabel.tag = 102
-            timeLabel.font = NSFont.systemFont(ofSize: 10)
-            timeLabel.textColor = .tertiaryLabelColor
-            timeLabel.alignment = .right
-            timeLabel.translatesAutoresizingMaskIntoConstraints = false
-            cell.addSubview(timeLabel)
-
-            let previewBtn = NSButton()
-            previewBtn.tag = 103
-            previewBtn.bezelStyle = .inline
-            previewBtn.title = I18N.t("预览", "Peek")
-            previewBtn.font = NSFont.systemFont(ofSize: 10)
-            previewBtn.translatesAutoresizingMaskIntoConstraints = false
-            previewBtn.isBordered = false
-            previewBtn.setContentHuggingPriority(.required, for: .horizontal)
-            cell.addSubview(previewBtn)
-
-            NSLayoutConstraint.activate([
-                previewBtn.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
-                previewBtn.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                previewBtn.widthAnchor.constraint(equalToConstant: 30),
-
-                icon.leadingAnchor.constraint(equalTo: previewBtn.trailingAnchor, constant: 2),
-                icon.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                icon.widthAnchor.constraint(equalToConstant: 16),
-                icon.heightAnchor.constraint(equalToConstant: 16),
-
-                label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 6),
-                label.trailingAnchor.constraint(equalTo: timeLabel.leadingAnchor, constant: -4),
-                label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-
-                timeLabel.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
-                timeLabel.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                timeLabel.widthAnchor.constraint(equalToConstant: 45)
-            ])
         }
 
-        let icon = cell.viewWithTag(100) as? NSImageView
-        let label = cell.viewWithTag(101) as? NSTextField
-        let timeLabel = cell.viewWithTag(102) as? NSTextField
-        let previewBtn = cell.viewWithTag(103) as? NSButton
-
-        label?.textColor = row == hoveredRow ? .selectedMenuItemTextColor : .labelColor
-        timeLabel?.stringValue = I18N.relativeTime(from: item.date)
-        timeLabel?.textColor = row == hoveredRow ? .selectedMenuItemTextColor : .tertiaryLabelColor
-
-        // Setup preview button
-        previewBtn?.target = self
-        previewBtn?.action = #selector(previewButtonClicked(_:))
-        previewBtn?.identifier = NSUserInterfaceItemIdentifier("\(row)")
-
-        let isText = item.kind == .text && item.text != nil && !item.text!.isEmpty
-        previewBtn?.isHidden = !isText
-
-        if isText {
-            label?.stringValue = short(item.text!)
-            icon?.image = nil
-            icon?.isHidden = true
-        } else {
-            label?.stringValue = I18N.t("[图片]", "[Image]")
-            icon?.image = thumbnail(for: item)
-            icon?.isHidden = false
-        }
-
+        cell.configure(item: item, sourceImage: sourceIconProvider.icon(for: item.sourceApp),
+                       thumbnailImage: item.kind == .image ? thumbnail(for: item) : nil,
+                       title: item.kind == .text ? short(item.text ?? "") : I18N.t("[图片]", "[Image]"),
+                       isHovering: row == hoveredRow)
         return cell
     }
 
@@ -375,6 +299,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         } else if let image = ClipboardStore.shared.image(for: item.id) {
             pb.writeObjects([image])
         }
+        ClipboardSource.writeOriginal(item.sourceApp, to: pb)
         HUDWindow.show(I18N.t("已复制", "Copied"))
     }
 
@@ -461,15 +386,6 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         guard let id = sender.representedObject as? String else { return }
         ClipboardStore.shared.deleteItem(id: id)
         resetAndLoad()
-    }
-
-    @objc private func previewButtonClicked(_ sender: NSButton) {
-        guard let rowStr = sender.identifier?.rawValue, let row = Int(rowStr) else { return }
-        guard row >= 0, row < items.count else { return }
-        let item = items[row]
-        if item.kind == .text {
-            showTextPreview(for: item)
-        }
     }
 
     // MARK: - Hover & Preview

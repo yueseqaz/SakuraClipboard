@@ -310,6 +310,7 @@ final class SearchPanelController: NSViewController, NSTableViewDataSource, NSTa
         } else if let image = ClipboardStore.shared.image(for: item.id) {
             pb.writeObjects([image])
         }
+        ClipboardSource.writeOriginal(item.sourceApp, to: pb)
         HUDWindow.show(I18N.t("已复制", "Copied"))
         view.window?.close()
     }
