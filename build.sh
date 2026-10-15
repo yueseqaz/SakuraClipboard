@@ -12,6 +12,7 @@ VOL_NAME="$APP_NAME Installer"
 ICONSET_DIR="$BUILD_DIR/AppIcon.iconset"
 ICON_PNG="$BUILD_DIR/AppIcon-1024.png"
 ICON_ICNS="$BUILD_DIR/AppIcon.icns"
+ARCHS="${ARCHS:-arm64 x86_64}"
 
 generate_icon() {
   mkdir -p "$BUILD_DIR"
@@ -66,22 +67,24 @@ SWIFT
   iconutil -c icns "$ICONSET_DIR" -o "$ICON_ICNS"
 }
 
-echo "🔨 编译 ARM64..."
 mkdir -p "$BUILD_DIR"
-swiftc -O -framework Cocoa -framework ServiceManagement -framework Carbon -lsqlite3 \
-  -target arm64-apple-macos11.0 \
-  Sources/*.swift -o "$BUILD_DIR/${APP_NAME}-arm64"
+BINARIES=()
+for arch in $ARCHS; do
+  case "$arch" in
+    arm64|x86_64) ;;
+    *) echo "Unsupported architecture: $arch" >&2; exit 1 ;;
+  esac
+  echo "🔨 编译 $arch..."
+  binary="$BUILD_DIR/${APP_NAME}-$arch"
+  swiftc -O -framework Cocoa -framework ServiceManagement -framework Carbon -lsqlite3 \
+    -target "$arch-apple-macos11.0" \
+    Sources/*.swift -o "$binary"
+  BINARIES+=("$binary")
+done
 
-echo "🔨 编译 x86_64..."
-swiftc -O -framework Cocoa -framework ServiceManagement -framework Carbon -lsqlite3 \
-  -target x86_64-apple-macos11.0 \
-  Sources/*.swift -o "$BUILD_DIR/${APP_NAME}-x86_64"
-
-echo "🔗 合并 Universal Binary..."
-lipo -create -output "$BUILD_DIR/$APP_NAME" \
-  "$BUILD_DIR/${APP_NAME}-arm64" \
-  "$BUILD_DIR/${APP_NAME}-x86_64"
-rm -f "$BUILD_DIR/${APP_NAME}-arm64" "$BUILD_DIR/${APP_NAME}-x86_64"
+echo "🔗 合并架构：$ARCHS..."
+lipo -create -output "$BUILD_DIR/$APP_NAME" "${BINARIES[@]}"
+rm -f "${BINARIES[@]}"
 
 echo "📦 打包..."
 rm -rf "$APP_BUNDLE"

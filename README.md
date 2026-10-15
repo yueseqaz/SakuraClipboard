@@ -9,7 +9,8 @@ A lightweight macOS menu bar clipboard history app. Keep your text and image cli
 - **Clipboard History** — Automatically saves text and image clips
 - **Quick Access** — Opens from menu bar or `Cmd+Shift+C`
 - **Search** — `Cmd+Shift+F` opens search panel with Chinese input support
-- **Preview** — Click "预览" button to view full text, hover images to preview
+- **Preview** — Hover text or images to preview; text also keeps its "预览" button
+- **Interactive Previews** — Text and images appear in the history menu's built-in left column; read or scroll without opening or activating another window
 - **Favorites** — Right-click to favorite items
 - **Auto Cleanup** — Configurable retention (1-30 days or forever)
 - **History Limit** — 100 to 5000 items
@@ -44,6 +45,18 @@ brew upgrade --cask sakura-clipboard
 
 ```bash
 ./build.sh
+```
+
+The default build includes both Apple Silicon and Intel. To build for Apple Silicon only:
+
+```bash
+ARCHS=arm64 ./build.sh
+```
+
+Run UI regression tests (menu bar icons at 1x/2x and history hover without clicking):
+
+```bash
+bash Tests/run.sh
 ```
 
 Outputs:

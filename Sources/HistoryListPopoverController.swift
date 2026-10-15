@@ -1,32 +1,5 @@
 import Cocoa
 
-private final class HoverHistoryTableView: NSTableView {
-    var onHoverRow: ((Int?) -> Void)?
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        let ta = NSTrackingArea(
-            rect: .zero,
-            options: [.inVisibleRect, .activeAlways, .mouseMoved, .mouseEnteredAndExited],
-            owner: self
-        )
-        addTrackingArea(ta)
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
-        let r = row(at: p)
-        onHoverRow?(r >= 0 ? r : nil)
-        super.mouseMoved(with: event)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        onHoverRow?(nil)
-        super.mouseExited(with: event)
-    }
-}
-
 private final class HoverHistoryRowView: NSTableRowView {
     private let selectionEffectView = NSVisualEffectView()
 
@@ -79,13 +52,21 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     private let effectView = NSVisualEffectView()
     private let headerLabel = NSTextField(labelWithString: "")
 
-    private var previewPanel: NSPanel?
     private var previewImageView: NSImageView?
+    private let textPreviewCache = NSCache<NSString, NSScrollView>()
+    private let previewInteraction = HistoryPreviewInteraction()
     private let thumbnailCache = NSCache<NSString, NSImage>()
     private let previewImageCache = NSCache<NSString, NSImage>()
-    private let previewLoadQueue = DispatchQueue(label: "com.sakura.clipboard.history.preview", qos: .userInitiated)
+    private let previewLoadQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "com.sakura.clipboard.history.preview"
+        queue.qualityOfService = .userInitiated
+        queue.maxConcurrentOperationCount = 1
+        return queue
+    }()
     private var pendingPreviewItemID: String?
-    private var textPreviewWorkItem: DispatchWorkItem?
+
+    private var menuContent: HistoryMenuContentView? { view.superview as? HistoryMenuContentView }
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 336, height: 420))
@@ -104,11 +85,11 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
     override func viewDidDisappear() {
         super.viewDidDisappear()
-        destroyPreviewPanel()
+        menuTrackingDidEnd()
     }
 
     deinit {
-        destroyPreviewPanel()
+        previewLoadQueue.cancelAllOperations()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -123,6 +104,8 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     }
 
     private func buildUI() {
+        textPreviewCache.countLimit = 12
+        textPreviewCache.totalCostLimit = 8 * 1024 * 1024
         effectView.translatesAutoresizingMaskIntoConstraints = false
         effectView.material = .menu
         effectView.blendingMode = .withinWindow
@@ -160,6 +143,10 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         tableView.onHoverRow = { [weak self] row in
             self?.handleHover(row)
         }
+        tableView.resolveHoverRow = { [weak self] row, point in
+            guard let self else { return row }
+            return self.previewInteraction.resolve(row: row, pointer: point)
+        }
 
         let contextMenu = NSMenu()
         contextMenu.delegate = self
@@ -189,6 +176,8 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     }
 
     private func resetAndLoad() {
+        hidePreview()
+        tableView.resetHover()
         items.removeAll()
         offset = 0
         hasMore = true
@@ -391,7 +380,27 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
     // MARK: - Context Menu
 
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === view.enclosingMenuItem?.menu else { return }
+        tableView.startHoverTracking()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === view.enclosingMenuItem?.menu else { return }
+        menuTrackingDidEnd()
+    }
+
+    func menuTrackingDidEnd() {
+        tableView.stopHoverTracking()
+        hidePreview()
+    }
+
+    func dismissPreview() {
+        hidePreview()
+    }
+
     func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === tableView.menu else { return }
         let row = tableView.selectedRow
         guard row >= 0, row < items.count else {
             menu.removeAllItems()
@@ -410,7 +419,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         if item.kind == .text, let text = item.text, text.count > 42 {
             let previewItem = NSMenuItem(title: I18N.t("预览", "Preview"), action: #selector(contextPreview(_:)), keyEquivalent: "")
             previewItem.target = self
-            previewItem.representedObject = text
+            previewItem.representedObject = item.id
             menu.addItem(previewItem)
         }
 
@@ -437,8 +446,9 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     }
 
     @objc private func contextPreview(_ sender: NSMenuItem) {
-        guard let text = sender.representedObject as? String else { return }
-        showTextPreview(text)
+        guard let id = sender.representedObject as? String,
+              let item = items.first(where: { $0.id == id }) else { return }
+        showTextPreview(for: item)
     }
 
     @objc private func contextToggleFavorite(_ sender: NSMenuItem) {
@@ -457,34 +467,30 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         guard let rowStr = sender.identifier?.rawValue, let row = Int(rowStr) else { return }
         guard row >= 0, row < items.count else { return }
         let item = items[row]
-        if item.kind == .text, let text = item.text {
-            showTextPreview(text)
+        if item.kind == .text {
+            showTextPreview(for: item)
         }
     }
 
     // MARK: - Hover & Preview
 
     private func handleHover(_ row: Int?) {
+        // The embedded preview remains readable until another record is hovered or the menu closes.
+        guard let row, row >= 0, row < items.count else { return }
+        guard row != hoveredRow else { return }
         let previous = hoveredRow
         hoveredRow = row
         if let previous {
             (tableView.rowView(atRow: previous, makeIfNecessary: false) as? HoverHistoryRowView)?.isHovering = false
             setRowTextColor(previous, isHovering: false)
         }
-        if let row {
-            (tableView.rowView(atRow: row, makeIfNecessary: false) as? HoverHistoryRowView)?.isHovering = true
-            setRowTextColor(row, isHovering: true)
-        }
-
-        guard let row, row >= 0, row < items.count else {
-            hidePreview()
-            return
-        }
+        (tableView.rowView(atRow: row, makeIfNecessary: false) as? HoverHistoryRowView)?.isHovering = true
+        setRowTextColor(row, isHovering: true)
         let item = items[row]
         if item.kind == .image {
             showPreview(for: item)
         } else {
-            hidePreview()
+            showTextPreview(for: item)
         }
     }
 
@@ -496,24 +502,29 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     }
 
     private func showPreview(for item: ClipboardItem) {
+        previewLoadQueue.cancelAllOperations()
+        pendingPreviewItemID = item.id
+        updatePreviewInteraction(for: item)
         let key = item.id as NSString
         if let cached = previewImageCache.object(forKey: key) {
-            hidePreview()
-            showPreview(cached)
+            showPreview(cached, for: item)
             return
         }
 
-        hidePreview()
-        pendingPreviewItemID = item.id
-        previewLoadQueue.async { [weak self] in
-            guard let self else { return }
+        let operation = BlockOperation()
+        operation.addExecutionBlock { [weak self, weak operation] in
+            guard let self, let operation, !operation.isCancelled else { return }
             guard let image = ClipboardStore.shared.image(for: item.id) else { return }
+            guard !operation.isCancelled else { return }
             self.previewImageCache.setObject(image, forKey: key)
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.pendingPreviewItemID == item.id else { return }
-                self.showPreview(image)
+            // NSMenu runs a nested tracking loop; publish without waiting for a click.
+            RunLoop.main.perform(inModes: [.default, .eventTracking]) { [weak self] in
+                guard let self, !operation.isCancelled, self.pendingPreviewItemID == item.id else { return }
+                self.showPreview(image, for: item)
             }
+            CFRunLoopWakeUp(CFRunLoopGetMain())
         }
+        previewLoadQueue.addOperation(operation)
     }
 
     private func closeContainingMenu() {
@@ -523,125 +534,114 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         }
     }
 
-    private func showPreview(_ image: NSImage) {
-        let maxSize = NSSize(width: 360, height: 280)
-        let fitted = fit(image.size, max: maxSize)
-
-        if previewPanel == nil {
-            let panel = NSPanel(
-                contentRect: NSRect(origin: .zero, size: fitted),
-                styleMask: [.borderless, .nonactivatingPanel],
-                backing: .buffered,
-                defer: false
-            )
-            panel.isOpaque = true
-            panel.backgroundColor = NSColor.black
-            panel.hasShadow = true
-            panel.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)
-            panel.collectionBehavior = [.canJoinAllSpaces, .transient]
-
-            let iv = NSImageView(frame: NSRect(origin: .zero, size: fitted))
-            iv.imageScaling = .scaleProportionallyUpOrDown
-            iv.wantsLayer = true
-            iv.layer?.cornerRadius = 8
-            iv.layer?.masksToBounds = true
-            panel.contentView = iv
-            previewPanel = panel
-            previewImageView = iv
+    private func showTextPreview(for item: ClipboardItem) {
+        previewLoadQueue.cancelAllOperations()
+        pendingPreviewItemID = item.id
+        updatePreviewInteraction(for: item)
+        if let cached = textPreviewCache.object(forKey: item.id as NSString) {
+            showTextPreview(cached, for: item)
+            return
         }
-
-        previewImageView?.image = image
-        previewImageView?.frame = NSRect(origin: .zero, size: fitted)
-        previewPanel?.setContentSize(fitted)
-
-        let mouse = NSEvent.mouseLocation
-        var x = mouse.x + 24
-        var y = max(16, mouse.y - fitted.height * 0.5)
-        if let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) {
-            if x + fitted.width > screen.visibleFrame.maxX - 8 {
-                x = mouse.x - fitted.width - 16
-            }
-            if y + fitted.height > screen.visibleFrame.maxY - 8 {
-                y = screen.visibleFrame.maxY - fitted.height - 8
-            }
+        if !item.hasMoreText, let text = item.text, !text.isEmpty {
+            showTextPreview(text, for: item)
+            return
         }
-
-        previewPanel?.setFrameOrigin(NSPoint(x: x, y: y))
-        previewPanel?.orderFrontRegardless()
+        let operation = BlockOperation()
+        operation.addExecutionBlock { [weak self, weak operation] in
+            guard let operation, !operation.isCancelled else { return }
+            // List rows contain only a prefix; previews must fetch the stored full text.
+            let text = ClipboardStore.shared.fullText(for: item.id) ?? item.text ?? ""
+            guard !operation.isCancelled else { return }
+            RunLoop.main.perform(inModes: [.default, .eventTracking]) { [weak self] in
+                guard let self, !operation.isCancelled, self.pendingPreviewItemID == item.id, !text.isEmpty else { return }
+                self.showTextPreview(text, for: item)
+            }
+            CFRunLoopWakeUp(CFRunLoopGetMain())
+        }
+        previewLoadQueue.addOperation(operation)
     }
 
-    private func showTextPreview(_ text: String) {
-        hidePreview()
+    private func showPreview(_ image: NSImage, for item: ClipboardItem) {
+        if previewImageView == nil {
+            let iv = NSImageView()
+            iv.imageScaling = .scaleProportionallyDown
+            previewImageView = iv
+        }
+        previewImageView?.image = image
+        if let previewImageView { presentPreview(previewImageView, for: item) }
+    }
 
-        let maxWidth: CGFloat = 360
-        let maxHeight: CGFloat = 280
+    private func showTextPreview(_ text: String, for item: ClipboardItem) {
+        let size = menuContent?.previewContentSize ?? NSSize(width: 344, height: 366)
+        let scrollView = Self.makeTextPreviewView(text: text, size: size)
+        textPreviewCache.setObject(scrollView, forKey: item.id as NSString, cost: text.utf16.count * 8)
+        showTextPreview(scrollView, for: item)
+    }
 
-        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: maxWidth, height: maxHeight))
+    private func showTextPreview(_ scrollView: NSScrollView, for item: ClipboardItem) {
+        presentPreview(scrollView, for: item)
+    }
+
+    private func updatePreviewInteraction(for item: ClipboardItem) {
+        guard let row = items.firstIndex(where: { $0.id == item.id }),
+              let window = tableView.window, window.isVisible,
+              let previewFrame = menuContent?.previewScreenFrame else { return }
+        let source = window.convertToScreen(tableView.convert(tableView.rect(ofRow: row), to: nil))
+        previewInteraction.show(row: row, sourceFrame: source, previewFrame: previewFrame)
+    }
+
+    private func presentPreview(_ content: NSView, for item: ClipboardItem) {
+        guard pendingPreviewItemID == item.id, let menuContent,
+              menuContent.window?.isVisible == true else { return }
+        menuContent.showPreview(content)
+    }
+
+    static func makeTextPreviewView(text: String, size: NSSize) -> NSScrollView {
+        let scrollView = NSScrollView(frame: NSRect(origin: .zero, size: size))
         scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
         scrollView.backgroundColor = .windowBackgroundColor
 
-        let textView = NSTextView()
-        textView.string = text
+        let textView = NSTextView(frame: NSRect(origin: .zero, size: scrollView.contentSize))
         textView.font = NSFont.systemFont(ofSize: 13)
+        textView.textColor = .labelColor
         textView.isEditable = false
         textView.isSelectable = true
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.minSize = NSSize(width: 0, height: scrollView.contentSize.height)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.backgroundColor = .clear
         textView.textContainerInset = NSSize(width: 12, height: 12)
         textView.textContainer?.lineFragmentPadding = 0
-        textView.textContainer?.widthTracksTextView = true
-
-        scrollView.documentView = textView
-
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: maxWidth, height: maxHeight),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
+        textView.textContainer?.containerSize = NSSize(
+            width: max(1, scrollView.contentSize.width - 24),
+            height: CGFloat.greatestFiniteMagnitude
         )
-        panel.isOpaque = true
-        panel.backgroundColor = NSColor.windowBackgroundColor
-        panel.hasShadow = true
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)
-        panel.collectionBehavior = NSWindow.CollectionBehavior([.canJoinAllSpaces, .transient])
-        panel.contentView = scrollView
-
-        let mouse = NSEvent.mouseLocation
-        var px = mouse.x + 24
-        var py = max(16, mouse.y - maxHeight * 0.5)
-        if let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) {
-            if px + maxWidth > screen.visibleFrame.maxX - 8 {
-                px = mouse.x - maxWidth - 16
-            }
-            if py + maxHeight > screen.visibleFrame.maxY - 8 {
-                py = screen.visibleFrame.maxY - maxHeight - 8
-            }
+        textView.textContainer?.widthTracksTextView = true
+        scrollView.documentView = textView
+        textView.string = text
+        if let container = textView.textContainer, let layout = textView.layoutManager {
+            layout.ensureLayout(for: container)
+            let contentHeight = layout.usedRect(for: container).height + 2 * textView.textContainerInset.height
+            textView.setFrameSize(NSSize(width: scrollView.contentSize.width,
+                                        height: max(scrollView.contentSize.height, ceil(contentHeight))))
         }
-
-        panel.setFrameOrigin(NSPoint(x: px, y: py))
-        panel.orderFrontRegardless()
-        previewPanel = panel
+        return scrollView
     }
 
     private func hidePreview() {
-        textPreviewWorkItem?.cancel()
+        if let hoveredRow {
+            (tableView.rowView(atRow: hoveredRow, makeIfNecessary: false) as? HoverHistoryRowView)?.isHovering = false
+            setRowTextColor(hoveredRow, isHovering: false)
+        }
+        hoveredRow = nil
         pendingPreviewItemID = nil
-        previewPanel?.orderOut(nil)
-        previewPanel?.close()
-        previewPanel = nil
-        previewImageView = nil
-    }
-
-    private func destroyPreviewPanel() {
-        previewPanel?.orderOut(nil)
-        previewPanel?.close()
-        previewPanel = nil
-        previewImageView = nil
-    }
-
-    private func fit(_ source: NSSize, max: NSSize) -> NSSize {
-        guard source.width > 0, source.height > 0 else { return max }
-        let scale = min(max.width / source.width, max.height / source.height, 1)
-        return NSSize(width: floor(source.width * scale), height: floor(source.height * scale))
+        previewLoadQueue.cancelAllOperations()
+        previewInteraction.reset()
+        menuContent?.clearPreview()
     }
 }

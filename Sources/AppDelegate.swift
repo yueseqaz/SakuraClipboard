@@ -12,16 +12,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private weak var currentStorageMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let btn = statusItem.button {
             btn.title = ""
-            if let appIcon = (NSApp.applicationIconImage?.copy() as? NSImage) ?? NSApp.applicationIconImage {
-                appIcon.size = NSSize(width: 18, height: 18)
-                appIcon.isTemplate = false
-                btn.image = appIcon
-            }
+            btn.image = StatusBarIcon.makeImage()
             btn.imagePosition = .imageOnly
+            btn.toolTip = "SakuraClipboard"
+            btn.setAccessibilityLabel("SakuraClipboard")
             btn.action = #selector(toggle)
             btn.target = self
         }
@@ -60,6 +58,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func showNativeMenu(relativeTo button: NSStatusBarButton) {
+        inlineHistoryControllers.forEach { $0.dismissPreview() }
         inlineHistoryControllers.removeAll()
 
         let menu = NSMenu()
@@ -72,7 +71,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         let history = NSMenuItem(title: I18N.t("历史记录", "History"), action: nil, keyEquivalent: "")
-        history.submenu = makeInlineHistorySubmenu(mode: .all)
+        let screenFrame = (button.window?.screen ?? NSScreen.main)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1024, height: 768)
+        history.submenu = makeInlineHistorySubmenu(mode: .all, visibleFrame: screenFrame)
         menu.addItem(history)
 
         let searchItem = NSMenuItem(title: I18N.t("搜索...", "Search..."), action: #selector(openSearch), keyEquivalent: "f")
@@ -118,7 +119,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = nil
     }
 
-    private func makeInlineHistorySubmenu(mode: HistoryListPopoverController.Mode) -> NSMenu {
+    private func makeInlineHistorySubmenu(mode: HistoryListPopoverController.Mode, visibleFrame: NSRect) -> NSMenu {
         let submenu = NSMenu()
         submenu.autoenablesItems = false
 
@@ -129,14 +130,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         inlineHistoryControllers.append(controller)
 
         let contentItem = NSMenuItem()
-        contentItem.view = controller.view
+        contentItem.view = HistoryMenuContentView(historyView: controller.view, visibleFrame: visibleFrame)
         submenu.addItem(contentItem)
+        submenu.delegate = controller
 
         return submenu
     }
 
     func menuDidClose(_ menu: NSMenu) {
-        inlineHistoryControllers.removeAll()
+        // Both columns share the submenu's lifetime; no independent preview window remains.
+        inlineHistoryControllers.forEach { $0.menuTrackingDidEnd() }
         currentStorageMenuItem = nil
     }
 

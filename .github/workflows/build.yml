@@ -17,6 +17,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Test UI regressions
+        run: bash Tests/run.sh
       
       - name: Build
         run: chmod +x build.sh && ./build.sh
