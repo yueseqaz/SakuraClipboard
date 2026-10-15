@@ -8,7 +8,7 @@
 
 - **剪贴板历史** — 自动保存文本和图片记录
 - **快速访问** — 菜单栏点击或 `Cmd+Shift+C` 打开
-- **搜索** — `Cmd+Shift+F` 打开搜索面板，支持中文输入
+- **一体化搜索** — 直接在历史记录中搜索，`Cmd+Shift+F` 聚焦同一面板的搜索框，支持中文输入
 - **预览** — 悬停文字或图片即可预览，不再显示每条记录前的预览按钮
 - **来源应用** — 新复制的内容显示来源应用图标，未保存来源的旧记录使用通用图标
 - **预览交互** — 文字和图片直接显示在历史面板左侧的内嵌预览区，可移入阅读或滚动，无需弹出或激活额外窗口
@@ -68,8 +68,11 @@ bash Tests/run.sh
 
 | 快捷键 | 功能 |
 |--------|------|
-| `Cmd+Shift+C` | 打开历史菜单 |
-| `Cmd+Shift+F` | 打开搜索面板 |
+| `Cmd+Shift+C` | 打开历史记录与搜索 |
+| `Cmd+Shift+F` | 聚焦同一历史面板的搜索框 |
+| `Cmd+F` | 面板打开时聚焦搜索框 |
+| `↑` / `↓`、回车 | 选择并预览结果，回车复制 |
+| `Esc` | 清空搜索，再按一次关闭 |
 
 ## 项目结构
 
@@ -80,7 +83,7 @@ Sources/
 ├── ClipboardStore.swift        # SQLite 存储
 ├── ClipboardMonitor.swift      # 剪贴板监听
 ├── HistoryListPopoverController.swift  # 历史列表 UI
-├── SearchPanel.swift           # 搜索面板 UI
+├── HistoryPanel.swift          # 历史与搜索共用面板、焦点管理
 ├── HUDWindow.swift             # 复制提示
 ├── KeyboardShortcut.swift      # 全局快捷键
 ├── ThemeManager.swift          # 深色/浅色模式

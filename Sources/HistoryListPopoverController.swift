@@ -33,7 +33,7 @@ private final class HoverHistoryRowView: NSTableRowView {
     override func drawSelection(in dirtyRect: NSRect) {}
 }
 
-final class HistoryListPopoverController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
+final class HistoryListPopoverController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate, NSSearchFieldDelegate {
     enum Mode {
         case all
         case favorites
@@ -41,7 +41,10 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
     private let pageSize = 15
     private var mode: Mode = .all
-    private var items: [ClipboardItem] = []
+    private(set) var items: [ClipboardItem] = []
+    private let store: ClipboardStore
+    private(set) var keyword = ""
+    var onRequestClose: (() -> Void)?
     private var offset = 0
     private var isLoading = false
     private var hasMore = true
@@ -51,6 +54,9 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     private let scrollView = NSScrollView()
     private let effectView = NSVisualEffectView()
     private let headerLabel = NSTextField(labelWithString: "")
+    private let searchField = NSSearchField()
+    private let emptyLabel = NSTextField(labelWithString: "")
+    private var isResetting = false
 
     private var previewImageView: NSImageView?
     private let textPreviewCache = NSCache<NSString, NSScrollView>()
@@ -68,6 +74,15 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     private var pendingPreviewItemID: String?
 
     private var menuContent: HistoryMenuContentView? { view.superview as? HistoryMenuContentView }
+
+    init(store: ClipboardStore = .shared) {
+        self.store = store
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 336, height: 420))
@@ -104,6 +119,67 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         view.frame = NSRect(x: 0, y: 0, width: width, height: height)
     }
 
+    func beginBrowsing(focusSearch: Bool) {
+        resetAndLoad()
+        tableView.startHoverTracking()
+        if focusSearch { self.focusSearch() }
+    }
+
+    func focusSearch() {
+        view.window?.makeFirstResponder(searchField)
+        searchField.selectText(nil)
+    }
+
+    func updateSearch(_ text: String) {
+        if searchField.stringValue != text { searchField.stringValue = text }
+        let nextKeyword = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard nextKeyword != keyword else { return }
+        keyword = nextKeyword
+        resetAndLoad()
+    }
+
+    func controlTextDidChange(_ obj: Notification) {
+        guard (obj.object as? NSSearchField) === searchField,
+              (searchField.currentEditor() as? NSTextView)?.hasMarkedText() != true else { return }
+        updateSearch(searchField.stringValue)
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard control === searchField, !textView.hasMarkedText() else { return false }
+        switch commandSelector {
+        case #selector(NSResponder.moveDown(_:)):
+            moveSelection(by: 1)
+        case #selector(NSResponder.moveUp(_:)):
+            moveSelection(by: -1)
+        case #selector(NSResponder.insertNewline(_:)):
+            copyRow(tableView.selectedRow >= 0 ? tableView.selectedRow : 0)
+        case #selector(NSResponder.cancelOperation(_:)):
+            cancelSearchOrClose()
+        default:
+            return false
+        }
+        return true
+    }
+
+    func cancelSearchOrClose() {
+        if !searchField.stringValue.isEmpty {
+            updateSearch("")
+            focusSearch()
+        } else {
+            onRequestClose?()
+        }
+    }
+
+    private func moveSelection(by direction: Int) {
+        guard !items.isEmpty else { return }
+        let current = tableView.selectedRow
+        let row = current < 0 ? (direction > 0 ? 0 : items.count - 1)
+            : max(0, min(items.count - 1, current + direction))
+        tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        tableView.scrollRowToVisible(row)
+        handleHover(row)
+    }
+
     private func buildUI() {
         textPreviewCache.countLimit = 12
         textPreviewCache.totalCostLimit = 8 * 1024 * 1024
@@ -118,6 +194,21 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         headerLabel.textColor = .secondaryLabelColor
         headerLabel.translatesAutoresizingMaskIntoConstraints = false
         effectView.addSubview(headerLabel)
+
+        searchField.placeholderString = I18N.t("搜索历史记录…", "Search history…")
+        searchField.setAccessibilityLabel(I18N.t("搜索历史记录", "Search history"))
+        searchField.font = NSFont.systemFont(ofSize: 13)
+        searchField.delegate = self
+        searchField.sendsSearchStringImmediately = true
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+        effectView.addSubview(searchField)
+
+        emptyLabel.font = NSFont.systemFont(ofSize: 12)
+        emptyLabel.textColor = .secondaryLabelColor
+        emptyLabel.alignment = .center
+        emptyLabel.translatesAutoresizingMaskIntoConstraints = false
+        emptyLabel.isHidden = true
+        effectView.addSubview(emptyLabel)
 
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
@@ -169,7 +260,16 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             headerLabel.topAnchor.constraint(equalTo: effectView.topAnchor, constant: 8),
             headerLabel.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 10),
 
-            scrollView.topAnchor.constraint(equalTo: headerLabel.bottomAnchor, constant: 6),
+            searchField.topAnchor.constraint(equalTo: headerLabel.bottomAnchor, constant: 8),
+            searchField.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 8),
+            searchField.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -8),
+            searchField.heightAnchor.constraint(equalToConstant: 28),
+
+            emptyLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
+            emptyLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
+            emptyLabel.widthAnchor.constraint(lessThanOrEqualTo: scrollView.widthAnchor, constant: -16),
+
+            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 8),
             scrollView.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 8),
             scrollView.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -8),
             scrollView.bottomAnchor.constraint(equalTo: effectView.bottomAnchor, constant: -8)
@@ -177,12 +277,18 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     }
 
     private func resetAndLoad() {
+        guard !isResetting else { return }
+        isResetting = true
+        defer { isResetting = false }
         hidePreview()
         tableView.resetHover()
+        tableView.deselectAll(nil)
         items.removeAll()
         offset = 0
         hasMore = true
         tableView.reloadData()
+        scrollView.contentView.scroll(to: .zero)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
         loadNextPageIfNeeded(force: true)
     }
 
@@ -191,6 +297,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     }
 
     @objc private func scrollChanged() {
+        guard !isResetting else { return }
         guard let doc = scrollView.documentView else { return }
         let visibleMaxY = scrollView.contentView.bounds.maxY
         if doc.frame.height - visibleMaxY < 180 {
@@ -206,18 +313,26 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         isLoading = true
 
         let query = ClipboardStore.Query(
-            keyword: "",
+            keyword: keyword,
             filterType: .all,
             favoritesOnly: mode == .favorites,
             favoriteFolder: nil
         )
 
-        let batch = ClipboardStore.shared.filteredItems(query: query, limit: pageSize, offset: offset)
+        let batch = store.filteredItems(query: query, limit: pageSize, offset: offset)
         items.append(contentsOf: batch)
         offset += batch.count
         hasMore = batch.count == pageSize
         isLoading = false
         tableView.reloadData()
+        emptyLabel.stringValue = keyword.isEmpty ? I18N.t("暂无历史记录", "No clipboard history")
+            : I18N.t("没有匹配的记录", "No matching records")
+        emptyLabel.isHidden = !items.isEmpty
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        tableView.tableColumns.first?.width = scrollView.contentSize.width
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int { items.count }
@@ -268,7 +383,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         if let cached = thumbnailCache.object(forKey: key) {
             return cached
         }
-        guard let image = ClipboardStore.shared.image(for: item.id) else { return nil }
+        guard let image = store.image(for: item.id) else { return nil }
         let size = NSSize(width: 16, height: 16)
         let thumb = NSImage(size: size)
         thumb.lockFocus()
@@ -281,6 +396,10 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
     @objc private func copySelected() {
         let row = tableView.clickedRow >= 0 ? tableView.clickedRow : tableView.selectedRow
+        copyRow(row)
+    }
+
+    private func copyRow(_ row: Int) {
         guard row >= 0, row < items.count else { return }
         let item = items[row]
         copyItem(item)
@@ -293,10 +412,10 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         let pb = NSPasteboard.general
         pb.clearContents()
         if item.kind == .text {
-            if let text = ClipboardStore.shared.fullText(for: item.id) ?? item.text {
+            if let text = store.fullText(for: item.id) ?? item.text {
                 pb.setString(text, forType: .string)
             }
-        } else if let image = ClipboardStore.shared.image(for: item.id) {
+        } else if let image = store.image(for: item.id) {
             pb.writeObjects([image])
         }
         ClipboardSource.writeOriginal(item.sourceApp, to: pb)
@@ -378,13 +497,13 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
     @objc private func contextToggleFavorite(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
-        ClipboardStore.shared.toggleFavorite(id: id)
+        store.toggleFavorite(id: id)
         resetAndLoad()
     }
 
     @objc private func contextDelete(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
-        ClipboardStore.shared.deleteItem(id: id)
+        store.deleteItem(id: id)
         resetAndLoad()
     }
 
@@ -396,6 +515,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         guard row != hoveredRow else { return }
         let previous = hoveredRow
         hoveredRow = row
+        tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
         if let previous {
             (tableView.rowView(atRow: previous, makeIfNecessary: false) as? HoverHistoryRowView)?.isHovering = false
             setRowTextColor(previous, isHovering: false)
@@ -430,7 +550,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         let operation = BlockOperation()
         operation.addExecutionBlock { [weak self, weak operation] in
             guard let self, let operation, !operation.isCancelled else { return }
-            guard let image = ClipboardStore.shared.image(for: item.id) else { return }
+            guard let image = self.store.image(for: item.id) else { return }
             guard !operation.isCancelled else { return }
             self.previewImageCache.setObject(image, forKey: key)
             // NSMenu runs a nested tracking loop; publish without waiting for a click.
@@ -444,6 +564,10 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     }
 
     private func closeContainingMenu() {
+        if let onRequestClose {
+            onRequestClose()
+            return
+        }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.view.enclosingMenuItem?.menu?.cancelTracking()
@@ -463,10 +587,10 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             return
         }
         let operation = BlockOperation()
-        operation.addExecutionBlock { [weak self, weak operation] in
+        operation.addExecutionBlock { [weak self, weak operation, store] in
             guard let operation, !operation.isCancelled else { return }
             // List rows contain only a prefix; previews must fetch the stored full text.
-            let text = ClipboardStore.shared.fullText(for: item.id) ?? item.text ?? ""
+            let text = store.fullText(for: item.id) ?? item.text ?? ""
             guard !operation.isCancelled else { return }
             RunLoop.main.perform(inModes: [.default, .eventTracking]) { [weak self] in
                 guard let self, !operation.isCancelled, self.pendingPreviewItemID == item.id, !text.isEmpty else { return }

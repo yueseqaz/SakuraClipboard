@@ -4,39 +4,41 @@ import Carbon.HIToolbox
 final class KeyboardShortcut {
     static let shared = KeyboardShortcut()
 
-    private var hotKeyRef: EventHotKeyRef?
+    private var hotKeyRefs: [EventHotKeyRef] = []
     private var handler: EventHandlerRef?
-    private var action: (() -> Void)?
+    private var actions: [UInt32: () -> Void] = [:]
+    private var nextID: UInt32 = 1
 
     private init() {}
 
     func register(key: Int, modifiers: NSEvent.ModifierFlags, action: @escaping () -> Void) {
-        self.action = action
+        if handler == nil {
+            var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+            InstallEventHandler(
+                GetApplicationEventTarget(),
+                { _, event, ptr -> OSStatus in
+                    guard let event, let ptr else { return OSStatus(eventNotHandledErr) }
+                    var hotKeyID = EventHotKeyID()
+                    guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                                            nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID) == noErr,
+                          hotKeyID.signature == OSType(0x53434C50) else { return OSStatus(eventNotHandledErr) }
+                    let shortcuts = Unmanaged<KeyboardShortcut>.fromOpaque(ptr).takeUnretainedValue()
+                    guard let action = shortcuts.actions[hotKeyID.id] else { return OSStatus(eventNotHandledErr) }
+                    action()
+                    return noErr
+                },
+                1,
+                &eventType,
+                Unmanaged.passUnretained(self).toOpaque(),
+                &handler
+            )
+        }
 
-        var eventType = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
-
-        let wrapper = Unmanaged.passRetained(HotKeyWrapper(action: action))
-        let ptr = wrapper.toOpaque()
-
-        InstallEventHandler(
-            GetApplicationEventTarget(),
-            { _, _, ptr -> OSStatus in
-                guard let ptr else { return OSStatus(eventNotHandledErr) }
-                let wrapper = Unmanaged<HotKeyWrapper>.fromOpaque(ptr).takeUnretainedValue()
-                wrapper.action()
-                return noErr
-            },
-            1,
-            &eventType,
-            ptr,
-            &handler
-        )
-
-        let hotKeyID = EventHotKeyID(signature: OSType(0x53434C50), id: 1) // 'SCLP'
-        RegisterEventHotKey(
+        let id = nextID
+        nextID += 1
+        let hotKeyID = EventHotKeyID(signature: OSType(0x53434C50), id: id) // 'SCLP'
+        var hotKeyRef: EventHotKeyRef?
+        let result = RegisterEventHotKey(
             UInt32(key),
             modifiers.carbonFlags,
             hotKeyID,
@@ -44,13 +46,18 @@ final class KeyboardShortcut {
             0,
             &hotKeyRef
         )
+        if result == noErr, let hotKeyRef {
+            hotKeyRefs.append(hotKeyRef)
+            actions[id] = action
+        }
     }
 
     func unregister() {
-        if let hotKeyRef {
+        for hotKeyRef in hotKeyRefs {
             UnregisterEventHotKey(hotKeyRef)
-            self.hotKeyRef = nil
         }
+        hotKeyRefs.removeAll()
+        actions.removeAll()
         if let handler {
             RemoveEventHandler(handler)
             self.handler = nil
@@ -60,11 +67,6 @@ final class KeyboardShortcut {
     deinit {
         unregister()
     }
-}
-
-private class HotKeyWrapper {
-    let action: () -> Void
-    init(action: @escaping () -> Void) { self.action = action }
 }
 
 extension NSEvent.ModifierFlags {

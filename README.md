@@ -8,10 +8,10 @@ A lightweight macOS menu bar clipboard history app. Keep your text and image cli
 
 - **Clipboard History** — Automatically saves text and image clips
 - **Quick Access** — Opens from menu bar or `Cmd+Shift+C`
-- **Search** — `Cmd+Shift+F` opens search panel with Chinese input support
+- **Unified Search** — Search directly within history; `Cmd+Shift+F` focuses the same panel's search field, with Chinese input support
 - **Preview** — Hover text or images to preview, without per-record preview buttons
 - **Source Apps** — New clips show their source application's icon; older clips with no source information use a generic icon
-- **Interactive Previews** — Text and images appear in the history menu's built-in left column; read or scroll without opening or activating another window
+- **Interactive Previews** — Text and images appear in the history panel's built-in left column; read or scroll without opening another window
 - **Favorites** — Right-click to favorite items
 - **Auto Cleanup** — Configurable retention (1-30 days or forever)
 - **History Limit** — 100 to 5000 items
@@ -68,8 +68,11 @@ Outputs:
 
 | Shortcut | Action |
 |----------|--------|
-| `Cmd+Shift+C` | Open history menu |
-| `Cmd+Shift+F` | Open search panel |
+| `Cmd+Shift+C` | Open history and search |
+| `Cmd+Shift+F` | Focus search in the same history panel |
+| `Cmd+F` | Focus search while the history panel is open |
+| `Up` / `Down`, `Return` | Select/preview results, then copy |
+| `Esc` | Clear search; press again to close |
 
 ## Project Structure
 
@@ -80,7 +83,7 @@ Sources/
 ├── ClipboardStore.swift        # SQLite storage
 ├── ClipboardMonitor.swift      # Clipboard polling
 ├── HistoryListPopoverController.swift  # History list UI
-├── SearchPanel.swift           # Search panel UI
+├── HistoryPanel.swift          # Shared history/search window and focus handling
 ├── HUDWindow.swift             # Copy notification
 ├── KeyboardShortcut.swift      # Global hotkeys
 ├── ThemeManager.swift          # Dark/light mode

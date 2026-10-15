@@ -19,3 +19,7 @@ swiftc -framework Cocoa -framework ServiceManagement -framework Carbon -lsqlite3
   "${SOURCES[@]}" Tests/ClipboardSourceTests.swift \
   -o "$TEST_DIR/ClipboardSourceTests"
 "$TEST_DIR/ClipboardSourceTests"
+swiftc -framework Cocoa -framework ServiceManagement -framework Carbon -lsqlite3 \
+  "${SOURCES[@]}" Tests/HistorySearchTests.swift \
+  -o "$TEST_DIR/HistorySearchTests"
+"$TEST_DIR/HistorySearchTests"

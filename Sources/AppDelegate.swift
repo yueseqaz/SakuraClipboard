@@ -7,7 +7,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var statusItem: NSStatusItem!
     let monitor = ClipboardMonitor()
 
-    private var inlineHistoryControllers: [HistoryListPopoverController] = []
     /// 当前展开菜单中的"占用"菜单项，用于清理后实时刷新标题。
     private weak var currentStorageMenuItem: NSMenuItem?
 
@@ -43,13 +42,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showFromKeyboard() {
-        guard let btn = statusItem.button else { return }
-        showNativeMenu(relativeTo: btn)
+        openHistory()
     }
 
     @objc private func openSearch() {
-        print("openSearch called")
-        SearchPanel.shared.show()
+        showHistoryPanel(focusSearch: true)
+    }
+
+    @objc private func openHistory() {
+        showHistoryPanel(focusSearch: false)
+    }
+
+    private func showHistoryPanel(focusSearch: Bool) {
+        // Menu actions must finish tracking before the panel takes keyboard focus.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            HistoryPanel.shared.show(relativeTo: self.statusItem.button, focusSearch: focusSearch)
+        }
     }
 
     @objc func toggle() {
@@ -58,8 +67,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func showNativeMenu(relativeTo button: NSStatusBarButton) {
-        inlineHistoryControllers.forEach { $0.dismissPreview() }
-        inlineHistoryControllers.removeAll()
+        HistoryPanel.shared.hide()
 
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -70,16 +78,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(latestItem)
         menu.addItem(.separator())
 
-        let history = NSMenuItem(title: I18N.t("历史记录", "History"), action: nil, keyEquivalent: "")
-        let screenFrame = (button.window?.screen ?? NSScreen.main)?.visibleFrame
-            ?? NSRect(x: 0, y: 0, width: 1024, height: 768)
-        history.submenu = makeInlineHistorySubmenu(mode: .all, visibleFrame: screenFrame)
+        let history = NSMenuItem(title: I18N.t("历史记录与搜索…", "History & Search…"), action: #selector(openHistory), keyEquivalent: "c")
+        history.target = self
+        history.keyEquivalentModifierMask = [.command, .shift]
         menu.addItem(history)
-
-        let searchItem = NSMenuItem(title: I18N.t("搜索...", "Search..."), action: #selector(openSearch), keyEquivalent: "f")
-        searchItem.target = self
-        searchItem.keyEquivalentModifierMask = [.command, .shift]
-        menu.addItem(searchItem)
 
         menu.addItem(.separator())
 
@@ -119,27 +121,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = nil
     }
 
-    private func makeInlineHistorySubmenu(mode: HistoryListPopoverController.Mode, visibleFrame: NSRect) -> NSMenu {
-        let submenu = NSMenu()
-        submenu.autoenablesItems = false
-
-        let controller = HistoryListPopoverController()
-        _ = controller.view  // Load view
-        controller.switchMode(mode)
-        controller.setMenuEmbeddedStyle(width: 350, height: 404)
-        inlineHistoryControllers.append(controller)
-
-        let contentItem = NSMenuItem()
-        contentItem.view = HistoryMenuContentView(historyView: controller.view, visibleFrame: visibleFrame)
-        submenu.addItem(contentItem)
-        submenu.delegate = controller
-
-        return submenu
-    }
-
     func menuDidClose(_ menu: NSMenu) {
-        // Both columns share the submenu's lifetime; no independent preview window remains.
-        inlineHistoryControllers.forEach { $0.menuTrackingDidEnd() }
         currentStorageMenuItem = nil
     }
 
