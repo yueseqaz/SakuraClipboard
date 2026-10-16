@@ -7,14 +7,15 @@ A lightweight macOS menu bar clipboard history app. Keep your text and image cli
 ## Features
 
 - **Clipboard History** — Automatically saves text and image clips
-- **Quick Access** — Opens from menu bar or `Cmd+Shift+C`
+- **Quick Access** — Open the menu and hover over History & Search, or use `Cmd+Shift+C`; no second click required
 - **Unified Search** — Search directly within history; `Cmd+Shift+F` focuses the same panel's search field, with Chinese input support
 - **Preview** — Hover text or images to preview, without per-record preview buttons
 - **Source Apps** — New clips show their source application's icon; older clips with no source information use a generic icon
 - **Interactive Previews** — Text and images appear in the history panel's built-in left column; read or scroll without opening another window
-- **Favorites** — Right-click to favorite items
-- **Auto Cleanup** — Configurable retention (1-30 days or forever)
-- **History Limit** — 100 to 5000 items
+- **Categories & Favorites** — All / Text / Images / Favorites tabs; click a record's star or use its context menu to save or unsave it, preserving the query when switching tabs
+- **Safe Cleanup** — Manual clearing keeps favorites unless "Also delete favorites" is checked; recopying content preserves its saved state
+- **Auto Cleanup** — Configurable retention (1-30 days or forever); age and capacity cleanup never remove favorites
+- **History Limit** — 100 to 5000 ordinary records, with favorites excluded from this limit
 - **Ignore Apps** — Exclude specific apps from monitoring
 - **Launch at Login** — Optional auto-start
 - **Chinese/English UI** — Language switching
@@ -41,6 +42,12 @@ To upgrade later:
 ```bash
 brew upgrade --cask sakura-clipboard
 ```
+
+## Product Website
+
+The static website lives in `docs/`, using plain HTML, CSS, and JavaScript with no build dependencies. It includes an interactive history, search, and preview demo, feature details, shortcuts, and download links.
+
+Preview locally with `python3 -m http.server 4173 --bind 127.0.0.1 --directory docs`, then open `http://127.0.0.1:4173`. See [website documentation](docs/WEBSITE.md) for deployment and maintenance.
 
 ## Build from Source
 

@@ -121,7 +121,8 @@ struct ClipboardSourceTests {
         cell.configure(item: text, sourceImage: finderIcon, thumbnailImage: nil, title: "Text from Finder", isHovering: false)
         cell.layoutSubtreeIfNeeded()
         let icons = cell.subviews.compactMap { $0 as? NSImageView }
-        precondition(!cell.subviews.contains { $0 is NSButton }, "History rows must not contain the old preview button")
+        precondition(cell.subviews.compactMap { $0 as? NSButton }.allSatisfy { $0.tag == 103 },
+                     "Only the favorite action may be a button; the old preview button must not return")
         precondition(icons[0].image === finderIcon && icons[0].toolTip?.contains("Finder") == true,
                      "The leading icon and tooltip must identify the source app")
         precondition(icons[1].isHidden && icons[1].frame.width == 0,

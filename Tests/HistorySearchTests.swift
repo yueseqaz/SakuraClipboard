@@ -113,6 +113,7 @@ struct HistorySearchTests {
         window.contentView = nil
         testPanelPlacement()
         testSharedPanelReuse(store: store)
+        testHoverActivation()
         print("Unified history search tests passed (inline filtering, full text, pagination, keyboard preview, IME and empty states)")
     }
 
@@ -163,5 +164,34 @@ struct HistorySearchTests {
         precondition(createdWindows == 2 && manager.controller?.keyword == "",
                      "Reopening after dismissal must start with a fresh history/search session")
         manager.hide()
+    }
+
+    private static func testHoverActivation() {
+        func advance(_ mode: RunLoop.Mode, seconds: TimeInterval = 0.15) {
+            let deadline = Date(timeIntervalSinceNow: seconds)
+            while Date() < deadline { _ = RunLoop.main.run(mode: mode, before: deadline) }
+        }
+        var opens = 0
+        let activation = MenuHoverActivation(delay: 0.02)
+        activation.schedule { opens += 1 }
+        precondition(opens == 0, "Merely crossing the menu item must not immediately open history")
+        activation.schedule { opens += 100 }
+        advance(.eventTracking)
+        precondition(opens == 1, "Hover must open once inside native menu tracking without a click")
+        advance(.default)
+        precondition(opens == 1, "The same timer in two run-loop modes must not open twice")
+        activation.schedule { opens += 100 }
+        activation.cancel()
+        advance(.eventTracking)
+        precondition(opens == 1, "Leaving the item or closing the menu must cancel delayed activation")
+        activation.schedule { activation.cancel(); opens += 1 }
+        advance(.default)
+        precondition(opens == 2, "Re-entering must work and opening may safely end menu tracking")
+        var temporary: MenuHoverActivation? = MenuHoverActivation(delay: 0.02)
+        temporary?.schedule { opens += 100 }
+        temporary = nil
+        advance(.eventTracking)
+        precondition(opens == 2, "Releasing menu state must not leave a delayed activation behind")
+        print("History menu activation tests passed (hover without click, crossing delay, cancellation and reentry)")
     }
 }

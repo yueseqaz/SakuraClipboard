@@ -34,13 +34,32 @@ private final class HoverHistoryRowView: NSTableRowView {
 }
 
 final class HistoryListPopoverController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate, NSSearchFieldDelegate {
-    enum Mode {
+    enum Mode: Int, CaseIterable {
         case all
+        case text
+        case image
         case favorites
+
+        var title: String {
+            switch self {
+            case .all: return I18N.t("全部", "All")
+            case .text: return I18N.t("文本", "Text")
+            case .image: return I18N.t("图片", "Images")
+            case .favorites: return I18N.t("收藏", "Favorites")
+            }
+        }
+
+        var filterType: ClipboardStore.FilterType {
+            switch self {
+            case .text: return .text
+            case .image: return .image
+            case .all, .favorites: return .all
+            }
+        }
     }
 
     private let pageSize = 15
-    private var mode: Mode = .all
+    private(set) var mode: Mode = .all
     private(set) var items: [ClipboardItem] = []
     private let store: ClipboardStore
     private(set) var keyword = ""
@@ -55,6 +74,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     private let effectView = NSVisualEffectView()
     private let headerLabel = NSTextField(labelWithString: "")
     private let searchField = NSSearchField()
+    private let filterControl = NSSegmentedControl()
     private let emptyLabel = NSTextField(labelWithString: "")
     private var isResetting = false
 
@@ -110,8 +130,15 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     }
 
     func switchMode(_ mode: Mode) {
+        _ = view
         self.mode = mode
+        filterControl.selectedSegment = mode.rawValue
         resetAndLoad()
+    }
+
+    @objc private func filterChanged(_ sender: NSSegmentedControl) {
+        guard let mode = Mode(rawValue: sender.selectedSegment) else { return }
+        switchMode(mode)
     }
 
     func setMenuEmbeddedStyle(width: CGFloat, height: CGFloat) {
@@ -203,6 +230,22 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         searchField.translatesAutoresizingMaskIntoConstraints = false
         effectView.addSubview(searchField)
 
+        filterControl.segmentCount = Mode.allCases.count
+        filterControl.trackingMode = .selectOne
+        filterControl.segmentStyle = .rounded
+        filterControl.segmentDistribution = .fillEqually
+        filterControl.font = NSFont.systemFont(ofSize: 12)
+        filterControl.target = self
+        filterControl.action = #selector(filterChanged(_:))
+        filterControl.setAccessibilityLabel(I18N.t("历史记录分类", "History categories"))
+        for mode in Mode.allCases {
+            filterControl.setLabel(mode.title, forSegment: mode.rawValue)
+            filterControl.setWidth(0, forSegment: mode.rawValue)
+        }
+        filterControl.selectedSegment = mode.rawValue
+        filterControl.translatesAutoresizingMaskIntoConstraints = false
+        effectView.addSubview(filterControl)
+
         emptyLabel.font = NSFont.systemFont(ofSize: 12)
         emptyLabel.textColor = .secondaryLabelColor
         emptyLabel.alignment = .center
@@ -212,16 +255,28 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.horizontalScrollElasticity = .none
         scrollView.scrollerStyle = .overlay
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.contentView.postsBoundsChangedNotifications = true
+        scrollView.contentView.postsFrameChangedNotifications = true
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(scrollChanged),
             name: NSView.boundsDidChangeNotification,
             object: scrollView.contentView
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(fitTableToViewport),
+            name: NSView.frameDidChangeNotification,
+            object: scrollView.contentView
+        )
 
+        tableView.style = .plain
+        tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+        tableView.autoresizingMask = [.width]
         tableView.headerView = nil
         tableView.rowHeight = 28
         tableView.intercellSpacing = NSSize(width: 0, height: 1)
@@ -246,6 +301,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
         let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("main"))
         col.width = 320
+        col.resizingMask = .autoresizingMask
         tableView.addTableColumn(col)
 
         scrollView.documentView = tableView
@@ -269,7 +325,12 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
             emptyLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
             emptyLabel.widthAnchor.constraint(lessThanOrEqualTo: scrollView.widthAnchor, constant: -16),
 
-            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 8),
+            filterControl.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 8),
+            filterControl.leadingAnchor.constraint(equalTo: searchField.leadingAnchor),
+            filterControl.trailingAnchor.constraint(equalTo: searchField.trailingAnchor),
+            filterControl.heightAnchor.constraint(equalToConstant: 25),
+
+            scrollView.topAnchor.constraint(equalTo: filterControl.bottomAnchor, constant: 8),
             scrollView.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 8),
             scrollView.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -8),
             scrollView.bottomAnchor.constraint(equalTo: effectView.bottomAnchor, constant: -8)
@@ -314,7 +375,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
 
         let query = ClipboardStore.Query(
             keyword: keyword,
-            filterType: .all,
+            filterType: mode.filterType,
             favoritesOnly: mode == .favorites,
             favoriteFolder: nil
         )
@@ -325,14 +386,32 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
         hasMore = batch.count == pageSize
         isLoading = false
         tableView.reloadData()
-        emptyLabel.stringValue = keyword.isEmpty ? I18N.t("暂无历史记录", "No clipboard history")
-            : I18N.t("没有匹配的记录", "No matching records")
+        if !keyword.isEmpty {
+            emptyLabel.stringValue = I18N.t("没有匹配的记录", "No matching records")
+        } else {
+            switch mode {
+            case .all: emptyLabel.stringValue = I18N.t("暂无历史记录", "No clipboard history")
+            case .text: emptyLabel.stringValue = I18N.t("暂无文本记录", "No text history")
+            case .image: emptyLabel.stringValue = I18N.t("暂无图片记录", "No image history")
+            case .favorites: emptyLabel.stringValue = I18N.t("暂无收藏，点击记录右侧的星标即可收藏", "No favorites. Click a record's star to save it.")
+            }
+        }
         emptyLabel.isHidden = !items.isEmpty
     }
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        tableView.tableColumns.first?.width = scrollView.contentSize.width
+        fitTableToViewport()
+    }
+
+    @objc private func fitTableToViewport() {
+        // Use the actual clip width: always-visible scrollbars and inset table styles reduce it.
+        let width = floor(scrollView.contentView.bounds.width)
+        guard width > 0, let column = tableView.tableColumns.first else { return }
+        if abs(tableView.frame.width - width) > 0.5 {
+            tableView.setFrameSize(NSSize(width: width, height: tableView.frame.height))
+        }
+        if abs(column.width - width) > 0.5 { column.width = width }
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int { items.count }
@@ -367,6 +446,7 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
                        thumbnailImage: item.kind == .image ? thumbnail(for: item) : nil,
                        title: item.kind == .text ? short(item.text ?? "") : I18N.t("[图片]", "[Image]"),
                        isHovering: row == hoveredRow)
+        cell.onToggleFavorite = { [weak self] in self?.store.toggleFavorite(id: item.id) }
         return cell
     }
 
@@ -425,11 +505,19 @@ final class HistoryListPopoverController: NSViewController, NSTableViewDataSourc
     // MARK: - Context Menu
 
     func menuWillOpen(_ menu: NSMenu) {
+        if menu === tableView.menu {
+            tableView.stopHoverTracking()
+            return
+        }
         guard menu === view.enclosingMenuItem?.menu else { return }
         tableView.startHoverTracking()
     }
 
     func menuDidClose(_ menu: NSMenu) {
+        if menu === tableView.menu {
+            if view.window?.isVisible == true { tableView.startHoverTracking() }
+            return
+        }
         guard menu === view.enclosingMenuItem?.menu else { return }
         menuTrackingDidEnd()
     }

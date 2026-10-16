@@ -25,6 +25,13 @@ final class HoverHistoryTableView: NSTableView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let row = self.row(at: convert(event.locationInWindow, from: nil))
+        guard row >= 0 else { return nil }
+        selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        return super.menu(for: event)
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         window?.acceptsMouseMovedEvents = true

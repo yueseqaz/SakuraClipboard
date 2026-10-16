@@ -25,6 +25,7 @@ class ClipboardStore {
     private let hardMaxItems = 5000
     private let maxItemsKey = "clipboard.maxItems"
     private let retentionDaysKey = "clipboard.retentionDays"
+    private let defaults: UserDefaults
     static let retentionDayOptions: [Int?] = [1, 3, 5, 7, 15, 30, nil]
     private let fileManager = FileManager.default
     private let dbLock = NSRecursiveLock()
@@ -51,18 +52,19 @@ class ClipboardStore {
     }()
 
     var maxItems: Int {
-        let raw = UserDefaults.standard.integer(forKey: maxItemsKey)
+        let raw = defaults.integer(forKey: maxItemsKey)
         if raw == 0 { return defaultMaxItems }
         return max(minMaxItems, min(raw, hardMaxItems))
     }
 
     var retentionDays: Int? {
-        let raw = UserDefaults.standard.integer(forKey: retentionDaysKey)
+        let raw = defaults.integer(forKey: retentionDaysKey)
         if raw <= 0 { return nil }
         return Self.retentionDayOptions.contains(raw) ? raw : nil
     }
 
-    init(storeURL: URL? = nil) {
+    init(storeURL: URL? = nil, defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         if let storeURL { self.storeURL = storeURL }
         openDatabase()
         createTablesIfNeeded()
@@ -76,7 +78,12 @@ class ClipboardStore {
         let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return }
         let capped = String(cleaned.prefix(maxTextBytes))
-        removeExistingText(capped)
+        if refreshExisting(where: "type = 0 AND text = ?", sourceApp: sourceApp, bind: { stmt in
+            sqlite3_bind_text(stmt, 4, capped, -1, SQLITE_TRANSIENT)
+        }) {
+            finalizeChanges()
+            return
+        }
         let item = ClipboardItem(text: capped, sourceApp: sourceApp)
         insert(item)
         finalizeChanges()
@@ -97,7 +104,16 @@ class ClipboardStore {
 
     private func addImageDataLocked(_ imageData: Data, sourceApp: ClipboardSource?) {
         guard imageData.count <= maxImageBytes else { return }
-        removeExistingImage(imageData)
+        if refreshExisting(where: "type = 1 AND (data_hash = ? OR (data_hash IS NULL AND image_data = ?))",
+                           sourceApp: sourceApp, bind: { stmt in
+            sqlite3_bind_text(stmt, 4, self.imageHash(imageData), -1, SQLITE_TRANSIENT)
+            imageData.withUnsafeBytes { ptr in
+                _ = sqlite3_bind_blob(stmt, 5, ptr.baseAddress, Int32(imageData.count), SQLITE_TRANSIENT)
+            }
+        }) {
+            finalizeChanges()
+            return
+        }
         let item = ClipboardItem(imageData: imageData, sourceApp: sourceApp)
         insert(item)
         finalizeChanges()
@@ -137,9 +153,17 @@ class ClipboardStore {
         )
     }
 
-    func clear() {
+    func clear(includingFavorites: Bool = false) {
         dbLock.lock()
         defer { dbLock.unlock() }
+        if !includingFavorites && items.contains(where: { $0.isFavorite }) {
+            execute("DELETE FROM clipboard_items WHERE is_favorite = 0;")
+            execute("VACUUM;")
+            execute("PRAGMA wal_checkpoint(TRUNCATE);")
+            loadAll()
+            notifyClipboardUpdated()
+            return
+        }
         // 物理清零：关闭连接 → 删除数据库文件 + WAL + SHM → 重新建库。
         // 比 DELETE+VACUUM 更彻底可靠：VACUUM 在 WAL 模式下可能因
         // 锁/事务状态失败，且重建整个文件较慢。直接删文件是最快的清零方式。
@@ -171,7 +195,7 @@ class ClipboardStore {
         dbLock.lock()
         defer { dbLock.unlock() }
         let clamped = max(minMaxItems, min(newValue, hardMaxItems))
-        UserDefaults.standard.set(clamped, forKey: maxItemsKey)
+        defaults.set(clamped, forKey: maxItemsKey)
         trim()
         applyRetentionPolicyLocked()
         loadAll()
@@ -182,9 +206,9 @@ class ClipboardStore {
         dbLock.lock()
         defer { dbLock.unlock() }
         if let days, Self.retentionDayOptions.contains(days) {
-            UserDefaults.standard.set(days, forKey: retentionDaysKey)
+            defaults.set(days, forKey: retentionDaysKey)
         } else {
-            UserDefaults.standard.removeObject(forKey: retentionDaysKey)
+            defaults.removeObject(forKey: retentionDaysKey)
         }
         applyRetentionPolicyLocked()
         trim()
@@ -455,23 +479,24 @@ class ClipboardStore {
         return false
     }
 
-    private func execute(_ sql: String, bind: ((OpaquePointer?) -> Void)? = nil) {
-        guard let db else { return }
+    @discardableResult
+    private func execute(_ sql: String, bind: (OpaquePointer?) -> Void = { _ in }) -> Bool {
+        guard let db else { return false }
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
             if let msg = sqlite3_errmsg(db) {
                 print("SQLite prepare failed: \(String(cString: msg))")
             }
-            return
+            return false
         }
-        bind?(stmt)
+        bind(stmt)
 
         var rc = sqlite3_step(stmt)
         var retries = 0
         while rc == SQLITE_BUSY, retries < 3 {
             usleep(10_000) // 10ms
             sqlite3_reset(stmt)
-            bind?(stmt)
+            bind(stmt)
             rc = sqlite3_step(stmt)
             retries += 1
         }
@@ -484,6 +509,7 @@ class ClipboardStore {
             }
         }
         sqlite3_finalize(stmt)
+        return rc == SQLITE_DONE
     }
 
     private func insert(_ item: ClipboardItem) {
@@ -533,29 +559,27 @@ class ClipboardStore {
         )
     }
 
-    private func removeExistingText(_ text: String) {
-        execute(
-            "DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items WHERE type = 0 AND text = ? LIMIT 1);",
-            bind: { stmt in sqlite3_bind_text(stmt, 1, text, -1, SQLITE_TRANSIENT) }
-        )
-    }
-
-    private func removeExistingImage(_ imageData: Data) {
-        let hash = imageHash(imageData)
-        execute(
-            "DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items WHERE type = 1 AND data_hash = ? LIMIT 1);",
+    private func refreshExisting(where predicate: String, sourceApp: ClipboardSource?, bind: (OpaquePointer?) -> Void) -> Bool {
+        // Recopying must not replace a saved record and silently discard its favorite state.
+        let updated = execute(
+            "UPDATE clipboard_items SET created_at = ?, source_app_bundle_id = ?, source_app_name = ? WHERE \(predicate);",
             bind: { stmt in
-                sqlite3_bind_text(stmt, 1, hash, -1, SQLITE_TRANSIENT)
-            }
-        )
-        execute(
-            "DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items WHERE type = 1 AND data_hash IS NULL AND image_data = ? LIMIT 1);",
-            bind: { stmt in
-                imageData.withUnsafeBytes { ptr in
-                    _ = sqlite3_bind_blob(stmt, 1, ptr.baseAddress, Int32(imageData.count), SQLITE_TRANSIENT)
+                sqlite3_bind_double(stmt, 1, Date().timeIntervalSince1970)
+                if let bundleID = sourceApp?.bundleIdentifier {
+                    sqlite3_bind_text(stmt, 2, bundleID, -1, SQLITE_TRANSIENT)
+                } else {
+                    sqlite3_bind_null(stmt, 2)
                 }
+                if let name = sourceApp?.name {
+                    sqlite3_bind_text(stmt, 3, name, -1, SQLITE_TRANSIENT)
+                } else {
+                    sqlite3_bind_null(stmt, 3)
+                }
+                bind(stmt)
             }
         )
+        guard updated, let db else { return false }
+        return sqlite3_changes(db) > 0
     }
 
     private func imageHash(_ data: Data) -> String {
@@ -569,6 +593,7 @@ class ClipboardStore {
             WHERE id IN (
                 SELECT id
                 FROM clipboard_items
+                WHERE is_favorite = 0
                 ORDER BY created_at DESC
                 LIMIT -1 OFFSET ?
             );

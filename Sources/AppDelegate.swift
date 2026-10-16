@@ -9,6 +9,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// 当前展开菜单中的"占用"菜单项，用于清理后实时刷新标题。
     private weak var currentStorageMenuItem: NSMenuItem?
+    private weak var historyMenuItem: NSMenuItem?
+    private let historyHoverActivation = MenuHoverActivation()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -67,6 +69,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func showNativeMenu(relativeTo button: NSStatusBarButton) {
+        historyHoverActivation.cancel()
         HistoryPanel.shared.hide()
 
         let menu = NSMenu()
@@ -81,6 +84,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let history = NSMenuItem(title: I18N.t("历史记录与搜索…", "History & Search…"), action: #selector(openHistory), keyEquivalent: "c")
         history.target = self
         history.keyEquivalentModifierMask = [.command, .shift]
+        history.toolTip = I18N.t("悬停即可展开历史记录与搜索", "Hover to open history and search")
+        historyMenuItem = history
         menu.addItem(history)
 
         menu.addItem(.separator())
@@ -121,7 +126,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = nil
     }
 
+    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
+        guard let item, item === historyMenuItem else {
+            historyHoverActivation.cancel()
+            return
+        }
+        historyHoverActivation.schedule { [weak self, weak menu, weak item] in
+            guard let self, let menu, let item,
+                  item === self.historyMenuItem, menu.highlightedItem === item else { return }
+            // End native tracking first so the shared panel can accept search/IME input.
+            menu.cancelTracking()
+            self.openHistory()
+        }
+    }
+
     func menuDidClose(_ menu: NSMenu) {
+        historyHoverActivation.cancel()
+        historyMenuItem = nil
         currentStorageMenuItem = nil
     }
 
@@ -187,7 +208,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
         let clearItem = NSMenuItem(
-            title: I18N.t("清除所有记录", "Clear All"),
+            title: I18N.t("清理历史记录…", "Clear History…"),
             action: #selector(clearAll),
             keyEquivalent: ""
         )
@@ -357,17 +378,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func clearAll() {
-        let alert = NSAlert()
-        alert.messageText = I18N.t("清除所有历史记录", "Clear All History")
-        alert.informativeText = I18N.t(
-            "此操作将删除全部历史记录，且不可恢复。是否继续？",
-            "This will delete all history and cannot be undone. Continue?"
-        )
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: I18N.t("清除", "Clear"))
-        alert.addButton(withTitle: I18N.t("取消", "Cancel"))
+        let alert = HistoryClearConfirmation.makeAlert()
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        ClipboardStore.shared.clear()
+        ClipboardStore.shared.clear(includingFavorites: HistoryClearConfirmation.includesFavorites(in: alert))
     }
 
     @objc private func quitFromMenu() {
